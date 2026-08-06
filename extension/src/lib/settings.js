@@ -2,6 +2,8 @@
 // Passing this object to storage.sync.get() means missing keys come back as defaults,
 // so no migration is needed when a new setting is added.
 
+import { setLanguage } from './i18n.js';
+
 /**
  * Modifier that must be held while hovering, or 'none' to look up on hover alone.
  * The values other than 'none' are exactly the `KeyboardEvent.key` strings, so the
@@ -13,6 +15,15 @@ export const HOVER_ONLY = 'none';
 
 export const DEFAULT_SETTINGS = {
   enabled: true,
+  /**
+   * Language of the extension's own text -- the options page, the popup and the toolbar menu.
+   * 'auto' follows the browser's UI language; see messages.js for the codes.
+   *
+   * A separate setting rather than chrome.i18n alone, because getMessage() answers in the
+   * browser's language and can't be overridden -- and a Spanish speaker running an
+   * English-language browser is precisely who this exists for.
+   */
+  uiLanguage: 'auto',
   /** One of TRIGGER_KEYS. */
   triggerKey: 'Shift',
   /**
@@ -65,6 +76,18 @@ export const DEFAULT_SETTINGS = {
   maxSenses: 6,
 };
 
-export function getSettings() {
-  return chrome.storage.sync.get(DEFAULT_SETTINGS);
+/**
+ * Read every setting, filling in defaults for keys storage doesn't have yet.
+ *
+ * Also points the string catalogue at `uiLanguage`, which is a side effect but the one we
+ * actually want: the invariant is "settings have been read, therefore the UI language is
+ * right". Every context that produces text reaches for settings first, so pinning the language
+ * here means no caller can render English by forgetting a setup call. The content script is the
+ * one exception -- it receives settings over a message rather than calling this -- and sets the
+ * language itself.
+ */
+export async function getSettings() {
+  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  setLanguage(settings.uiLanguage);
+  return settings;
 }

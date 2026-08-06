@@ -10,6 +10,8 @@
 
 (() => {
   const zh = (globalThis.zhDic ??= {});
+  // messages.js is loaded ahead of this file by the manifest, so the catalogue is already there.
+  const { t } = globalThis.zhI18n;
 
   const MARGIN = 12; // gap between the hovered word and the popup
   const EDGE = 8; // keep this far from the viewport edge
@@ -17,10 +19,10 @@
   /** Turns a playback failure into something a learner can act on. */
   function describePlaybackError(error) {
     const reason = String(error?.message ?? error);
-    if (reason === 'no-voice') return 'No Chinese voice installed — see the extension options';
-    if (reason === 'no-recording') return 'No recording on Wikimedia Commons for this word';
-    if (reason === 'no-audio') return 'No Chinese voice installed and no recording found';
-    return `Could not play audio: ${reason}`;
+    if (reason === 'no-voice') return t('noVoice');
+    if (reason === 'no-recording') return t('noRecording');
+    if (reason === 'no-audio') return t('noAudio');
+    return t('playbackFailed', reason);
   }
 
   class Popup {
@@ -93,8 +95,11 @@
       // Describes the trigger currently configured, so changing it doesn't leave stale advice.
       const { triggerKey } = this.#settings;
       const LABELS = { Control: 'Ctrl', Meta: navigator.platform.startsWith('Mac') ? 'Cmd' : 'Win' };
-      const how = triggerKey === 'none' ? 'Hover' : `${LABELS[triggerKey] ?? triggerKey}-hover`;
-      this.#hint.textContent = `${how} to look up · ←/→ switch · Esc to close`;
+      const how =
+        triggerKey === 'none'
+          ? t('popupHintHover')
+          : t('popupHintKey', LABELS[triggerKey] ?? triggerKey);
+      this.#hint.textContent = t('popupHint', how);
     }
 
     contains(node) {
@@ -190,11 +195,11 @@
         if (state.duplicate) {
           button.dataset.state = 'duplicate';
           button.disabled = true;
-          button.title = 'Already in your Anki collection';
+          button.title = t('alreadyInAnki');
         } else if (!state.canAdd) {
           button.dataset.state = 'error';
           button.disabled = true;
-          button.title = `Anki won't accept this note: ${state.error}`;
+          button.title = t('ankiRejected', state.error);
         }
       }
     }
@@ -222,8 +227,8 @@
       button.className = 'speak';
       button.type = 'button';
       button.dataset.state = 'idle';
-      button.setAttribute('aria-label', `Play pronunciation of ${card.headword}`);
-      button.title = `Play ${card.headword}`;
+      button.setAttribute('aria-label', t('playPronunciation', card.headword));
+      button.title = t('play', card.headword);
       // Inline SVG: a font glyph would inherit the page's emoji rendering and shift the row.
       button.innerHTML =
         '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
@@ -266,8 +271,8 @@
       button.type = 'button';
       button.dataset.state = 'idle';
       button.dataset.entry = String(index);
-      button.setAttribute('aria-label', `Add ${card.headword} to Anki`);
-      button.title = `Add ${card.headword} to Anki`;
+      button.setAttribute('aria-label', t('addToAnki', card.headword));
+      button.title = t('addToAnki', card.headword);
       button.innerHTML =
         '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
         '<path class="plus" d="M8 3.4v9.2M3.4 8h9.2"/>' +
@@ -285,13 +290,14 @@
           button.dataset.state = 'added';
           button.disabled = true;
           button.title = result?.created?.length
-            ? `Added to ${result.deck} (created ${result.created.join(' and ')})`
-            : `Added to ${result?.deck ?? 'Anki'}`;
+            ? t('ankiAddedCreated', result.deck, result.created.join(t('and')))
+            : t('ankiAdded', result?.deck ?? 'Anki');
         } catch (error) {
           const reason = String(error?.message ?? error);
-          button.dataset.state = /duplicate/i.test(reason) ? 'duplicate' : 'error';
-          button.disabled = /duplicate/i.test(reason);
-          button.title = /duplicate/i.test(reason) ? 'Already in your Anki collection' : `Could not add: ${reason}`;
+          const duplicate = /duplicate/i.test(reason);
+          button.dataset.state = duplicate ? 'duplicate' : 'error';
+          button.disabled = duplicate;
+          button.title = duplicate ? t('alreadyInAnki') : t('ankiAddFailed', reason);
         }
       });
 
@@ -319,7 +325,7 @@
         const variant = document.createElement('span');
         variant.className = 'variant';
         variant.textContent = secondary;
-        variant.title = script === 'traditional' ? 'Simplified' : 'Traditional';
+        variant.title = t(script === 'traditional' ? 'tokenSimplified' : 'tokenTraditional');
         head.append(variant);
       }
 
@@ -356,7 +362,7 @@
         const more = document.createElement('button');
         more.className = 'more';
         more.type = 'button';
-        more.textContent = `+${hidden} more`;
+        more.textContent = t('moreSenses', hidden);
         more.addEventListener('click', () => {
           for (const sense of card.senses.slice(maxSenses)) {
             const li = document.createElement('li');

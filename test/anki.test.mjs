@@ -173,7 +173,7 @@ test('creates the deck and note type when missing, and says what it made', async
     fields: DEFAULT_SETTINGS.ankiFields,
   });
 
-  assert.deepEqual(created, ['deck "Mandarin::Mining"', 'note type "My Type"']);
+  assert.deepEqual(created, ['deck “Mandarin::Mining”', 'note type “My Type”']);
   assert.deepEqual(models['My Type'], ['Hanzi', 'Color', 'Pinyin', 'English', 'Sound']);
 
   const createModel = calls.find((c) => c.action === 'createModel');
@@ -191,7 +191,7 @@ test('creates nothing when the deck and note type already exist', async () => {
 test('creates only what is missing', async () => {
   const { client, calls } = fakeAnki({ decks: ['D'], models: {} });
   const created = await ensureTarget(client, { deck: 'D', model: 'M', fields: { Hanzi: 'headword' } });
-  assert.deepEqual(created, ['note type "M"']);
+  assert.deepEqual(created, ['note type “M”']);
   assert.ok(!calls.some((c) => c.action === 'createDeck'));
 });
 

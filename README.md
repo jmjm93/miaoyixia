@@ -3,6 +3,8 @@
 An extension for Chromium-based browsers that opens a popup over the Chinese word you're hovering with its definition.
 It contains sound and Anki support.
 
+This app has been extensively vibecoded, if you're the type to care about that.
+
 ## Settings
 
 Right-click the toolbar icon and choose **Options…**, or **Details → Extension options**.
@@ -13,6 +15,12 @@ from the toolbar while it's open.
 
 **Enabled** switches the whole thing off without uninstalling it — the same toggle as clicking
 the toolbar button.
+
+**Language** sets the language of the extension's own text — this page, the popup's hint bar and
+button tooltips, and the toolbar menu. **English** and **Español** are available, and the default
+**Match browser** follows the browser's UI language. It's a setting rather than just following the
+browser because a Spanish speaker on an English-language browser is a normal case, not an edge
+one. See [Languages](#languages) for what this does *not* change.
 
 **Trigger** is the main one. Either a held modifier — <kbd>Shift</kbd>, <kbd>Ctrl</kbd>,
 <kbd>Alt</kbd> or <kbd>Win</kbd>/<kbd>Cmd</kbd> — or **No key, show on hover**, which looks
@@ -85,6 +93,32 @@ Once a popup is open: <kbd>←</kbd>/<kbd>→</kbd> switch candidate words,
 <kbd>1</kbd>–<kbd>9</kbd> jump to the tab showing that digit, and <kbd>Esc</kbd> closes it. In
 hover mode <kbd>Esc</kbd> keeps it shut until the pointer reaches a different word, so it isn't
 undone by the next mouse twitch.
+
+## Languages
+
+The interface speaks English and Spanish. **The definitions do not** — CC-CEDICT is a Chinese–English
+dictionary, so glosses, and therefore anything derived from them (Anki's definition fields, the
+`+n more` senses), stay in English whatever this is set to. A Spanish gloss layer is a separate
+piece of work.
+
+Strings live in one place, [`extension/src/lib/messages.js`](extension/src/lib/messages.js), as a
+`{ language: { key: string } }` catalogue. Adding a language means adding a key to `LANGUAGES`, a
+block of strings beside the others, and an `<option>` to the language control — `test/i18n.test.mjs`
+then fails until every key is present and every placeholder accounted for.
+
+Two details are worth knowing before editing it:
+
+- It is a **classic script**, not a module, because the manifest loads it as a content script and
+  `import`/`export` there is a syntax error. `i18n.js` next door re-exports it for the module side.
+  A test enforces this.
+- `chrome.i18n` is used only to read the browser's language. It isn't used for the strings
+  themselves, because `getMessage()` always answers in the browser's UI language and can't be
+  overridden. `_locales/` still holds the extension's name and description, which Chrome renders
+  itself — those two are localised the standard way and appear per-locale in the Web Store.
+
+Key names — <kbd>Shift</kbd>, <kbd>Ctrl</kbd>, <kbd>Alt</kbd> — are deliberately left untranslated
+everywhere, since they're what's printed on the keyboard and they're also the exact
+`KeyboardEvent.key` values the trigger is compared against.
 
 ## Known limitations
 

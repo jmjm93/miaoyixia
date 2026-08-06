@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "miaoyixia — Chinese hover dictionary",
+  "name": "__MSG_extName__",
   "version": "0.1.0",
-  "description": "Hover a Chinese word and press Shift for pinyin and definitions. Fully offline, powered by CC-CEDICT.",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "permissions": ["storage", "contextMenus"],
   "host_permissions": [
     "https://commons.wikimedia.org/*",
@@ -20,6 +21,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "src/lib/messages.js",
         "src/content/text-at-point.js",
         "src/content/speech.js",
         "src/content/popup.js",

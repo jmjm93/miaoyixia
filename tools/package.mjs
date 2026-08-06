@@ -121,6 +121,46 @@ for (const name of names) {
 }
 
 const manifest = JSON.parse(await readFile(join(sourceDir, 'manifest.json'), 'utf8'));
+
+/**
+ * Resolve a manifest field that may be a `__MSG_key__` reference into real text.
+ *
+ * Chrome does this itself at install time, but the packager needs the actual name for the zip
+ * filename and the summary line -- otherwise the build is called "msg-extname".
+ */
+async function localised(value) {
+  const key = /^__MSG_([A-Za-z0-9_]+)__$/.exec(String(value ?? ''))?.[1];
+  if (!key) return String(value ?? '');
+  const path = `_locales/${manifest.default_locale}/messages.json`;
+  const messages = JSON.parse(await readFile(join(sourceDir, path), 'utf8'));
+  return messages[key]?.message ?? String(value);
+}
+
+// Every __MSG_ reference has to resolve in every locale shipped, not just the default: Chrome
+// rejects the upload if one is missing, and the error it gives doesn't name the key.
+const localeDirs = names
+  .filter((name) => name.startsWith('_locales/'))
+  .map((name) => name.split('/')[1]);
+const refs = [...JSON.stringify(manifest).matchAll(/__MSG_([A-Za-z0-9_]+)__/g)].map((m) => m[1]);
+
+if (refs.length && !manifest.default_locale) {
+  problems.push('the manifest uses __MSG_ but declares no default_locale');
+}
+if (refs.length && !localeDirs.includes(manifest.default_locale)) {
+  problems.push(`no _locales/${manifest.default_locale}/ for the declared default_locale`);
+}
+for (const locale of new Set(localeDirs)) {
+  const path = `_locales/${locale}/messages.json`;
+  if (!names.includes(path)) {
+    problems.push(`_locales/${locale}/ has no messages.json`);
+    continue;
+  }
+  const messages = JSON.parse(await readFile(join(sourceDir, path), 'utf8'));
+  for (const ref of refs) {
+    if (!messages[ref]?.message) problems.push(`_locales/${locale} is missing the message "${ref}"`);
+  }
+}
+
 for (const path of [...Object.values(manifest.icons ?? {}), ...Object.values(manifest.action?.default_icon ?? {})]) {
   if (!names.includes(path)) problems.push(`manifest references a missing file: ${path}`);
 }
@@ -139,11 +179,12 @@ const entries = await Promise.all(names.map(async (name) => ({ name, data: await
 const zip = buildZip(entries);
 
 await mkdir(outDir, { recursive: true });
-const slug = (manifest.name.match(/[a-z0-9]+/gi) ?? ['extension']).join('-').toLowerCase();
+const name = await localised(manifest.name);
+const slug = (name.match(/[a-z0-9]+/gi) ?? ['extension']).join('-').toLowerCase();
 const outFile = join(outDir, `${slug}-${manifest.version}.zip`);
 await writeFile(outFile, zip);
 
 const raw = entries.reduce((n, e) => n + e.data.length, 0);
-console.log(`${manifest.name}  v${manifest.version}`);
+console.log(`${name}  v${manifest.version}`);
 console.log(`  ${entries.length} files, ${(raw / 1e6).toFixed(2)} MB -> ${(zip.length / 1e6).toFixed(2)} MB zipped`);
 console.log(`  ${outFile}`);

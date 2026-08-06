@@ -5,6 +5,8 @@
 // That is what lets the extension adapt to whatever collection it finds: the shipped defaults
 // merely pre-fill the mapping, they aren't assumed anywhere.
 
+import { t } from './i18n.js';
+
 /** Anki fields are HTML, so anything derived from dictionary text has to be escaped. */
 export function escapeHtml(text) {
   return String(text)
@@ -54,50 +56,60 @@ export function sentenceWithWordBold(card) {
 }
 
 /**
- * Every value a field can be bound to. `label` is what the options page shows.
- * @type {Array<{id: string, label: string, render: (card: object, extras: object) => string}>}
+ * Every value a field can be bound to.
+ *
+ * `labelKey` rather than a literal label: this array is built once at import, but the options
+ * page can change language without reloading, so the text has to be resolved at render time.
+ * Use tokenLabel() for that.
+ *
+ * @type {Array<{id: string, labelKey: string, render: (card: object, extras: object) => string}>}
  */
 export const TOKENS = [
-  { id: 'none', label: '— leave empty —', render: () => '' },
-  { id: 'headword', label: 'Word (as hovered)', render: (c) => escapeHtml(c.headword) },
-  { id: 'simplified', label: 'Simplified', render: (c) => escapeHtml(c.simplified) },
-  { id: 'traditional', label: 'Traditional', render: (c) => escapeHtml(c.traditional) },
-  { id: 'colourHanzi', label: 'Word, tone-coloured', render: colouredHanzi },
-  { id: 'pinyin', label: 'Pinyin (nǐ hǎo)', render: (c) => escapeHtml(c.pinyin) },
-  { id: 'colourPinyin', label: 'Pinyin, tone-coloured', render: colouredPinyin },
-  { id: 'pinyinNumbered', label: 'Pinyin, numbered (ni3 hao3)', render: (c) => escapeHtml(c.pinyinNumbered) },
+  { id: 'none', labelKey: 'tokenNone', render: () => '' },
+  { id: 'headword', labelKey: 'tokenHeadword', render: (c) => escapeHtml(c.headword) },
+  { id: 'simplified', labelKey: 'tokenSimplified', render: (c) => escapeHtml(c.simplified) },
+  { id: 'traditional', labelKey: 'tokenTraditional', render: (c) => escapeHtml(c.traditional) },
+  { id: 'colourHanzi', labelKey: 'tokenColourHanzi', render: colouredHanzi },
+  { id: 'pinyin', labelKey: 'tokenPinyin', render: (c) => escapeHtml(c.pinyin) },
+  { id: 'colourPinyin', labelKey: 'tokenColourPinyin', render: colouredPinyin },
+  { id: 'pinyinNumbered', labelKey: 'tokenPinyinNumbered', render: (c) => escapeHtml(c.pinyinNumbered) },
   {
     id: 'senses',
-    label: 'All definitions',
+    labelKey: 'tokenSenses',
     render: (c) => c.senses.map(escapeHtml).join('<br>'),
   },
   {
     id: 'sensesNumbered',
-    label: 'All definitions, numbered',
+    labelKey: 'tokenSensesNumbered',
     render: (c) => c.senses.map((s, i) => `${i + 1}. ${escapeHtml(s)}`).join('<br>'),
   },
-  { id: 'firstSense', label: 'First definition only', render: (c) => escapeHtml(c.senses[0] ?? '') },
-  { id: 'sentence', label: 'Example sentence (from the page)', render: (c) => escapeHtml(c.sentence) },
-  { id: 'sentenceBold', label: 'Example sentence, word in bold', render: sentenceWithWordBold },
+  { id: 'firstSense', labelKey: 'tokenFirstSense', render: (c) => escapeHtml(c.senses[0] ?? '') },
+  { id: 'sentence', labelKey: 'tokenSentence', render: (c) => escapeHtml(c.sentence) },
+  { id: 'sentenceBold', labelKey: 'tokenSentenceBold', render: sentenceWithWordBold },
   {
     id: 'audio',
-    label: 'Pronunciation audio',
+    labelKey: 'tokenAudio',
     // Filled by the caller once the media file has actually been stored in Anki.
     render: (_c, extras) => (extras.audioFilename ? `[sound:${extras.audioFilename}]` : ''),
   },
   {
     id: 'source',
-    label: 'Source page (link)',
+    labelKey: 'tokenSource',
     render: (c) =>
       c.sourceUrl ? `<a href="${escapeHtml(c.sourceUrl)}">${escapeHtml(c.sourceTitle || c.sourceUrl)}</a>` : '',
   },
-  { id: 'sourceUrl', label: 'Source page (plain URL)', render: (c) => escapeHtml(c.sourceUrl) },
+  { id: 'sourceUrl', labelKey: 'tokenSourceUrl', render: (c) => escapeHtml(c.sourceUrl) },
 ];
 
 const BY_ID = new Map(TOKENS.map((token) => [token.id, token]));
 
 export function tokenExists(id) {
   return BY_ID.has(id);
+}
+
+/** The token's name in the language currently selected. */
+export function tokenLabel(token) {
+  return t(token.labelKey);
 }
 
 /**

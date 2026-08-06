@@ -5,6 +5,7 @@
 // tested without a browser.
 
 import { HOVER_ONLY } from './settings.js';
+import { t } from './i18n.js';
 
 export const NAME = '瞄一下';
 
@@ -15,7 +16,14 @@ export const MENU = {
   options: 'open-options',
 };
 
-/** What each modifier is called on the user's keyboard. */
+/**
+ * What each modifier is called on the user's keyboard.
+ *
+ * Deliberately not translated. These are the labels printed on the physical keys and the exact
+ * `KeyboardEvent.key` values the content script compares against, so they read the same in
+ * every language -- and naming Shift "Mayús" in the tooltip while the trigger dropdown still
+ * said "Shift" would be worse than leaving both in English.
+ */
 export function modifierLabel(key, isMac = false) {
   if (key === 'Control') return 'Ctrl';
   if (key === 'Meta') return isMac ? 'Cmd' : 'Win';
@@ -38,11 +46,11 @@ export function namedModifier(settings) {
 
 /** Tooltip: says what the state is and what a click will do, since click toggles. */
 export function actionTitle(settings, isMac = false) {
-  if (!settings.enabled) return `${NAME} — off\nClick to turn on`;
+  if (!settings.enabled) return t('actionOff', NAME);
   const how = requiresModifier(settings)
-    ? `hold ${modifierLabel(settings.triggerKey, isMac)}`
-    : 'hover, no key needed';
-  return `${NAME} — on, ${how}\nClick to turn off`;
+    ? t('actionHoldKey', modifierLabel(settings.triggerKey, isMac))
+    : t('actionHover');
+  return t('actionOn', NAME, how);
 }
 
 /**
@@ -70,9 +78,9 @@ export function iconPaths(enabled) {
 /** Titles and checkbox states for the action's context menu. */
 export function menuState(settings, isMac = false) {
   return {
-    [MENU.enabled]: { title: 'Enabled', checked: Boolean(settings.enabled) },
+    [MENU.enabled]: { title: t('enabled'), checked: Boolean(settings.enabled) },
     [MENU.modifier]: {
-      title: `Require ${modifierLabel(namedModifier(settings), isMac)} to look up`,
+      title: t('menuRequireKey', modifierLabel(namedModifier(settings), isMac)),
       checked: requiresModifier(settings),
       // Meaningless while the extension is off.
       enabled: Boolean(settings.enabled),

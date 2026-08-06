@@ -1,36 +1,54 @@
 <!doctype html>
+<!--
+  The English text below is the literal fallback: options.js replaces every [data-i18n] node
+  with the string for the selected language on load. Keeping the English inline means the page
+  is still readable if the script fails, and it keeps diffs legible.
+-->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>瞄一下 settings</title>
+    <title data-i18n="optionsTitle">瞄一下 settings</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main>
       <h1>瞄一下</h1>
-      <p class="lede">Chinese popup dictionary.</p>
+      <p class="lede" data-i18n="tagline">Chinese popup dictionary.</p>
 
       <section>
         <label class="row switch">
           <input type="checkbox" id="enabled" />
-          <span>Enabled</span>
+          <span data-i18n="enabled">Enabled</span>
         </label>
 
         <label class="row">
-          <span>Trigger</span>
+          <span>
+            <span data-i18n="uiLanguage">Language</span>
+            <small data-i18n="uiLanguageHint">Language of this page, the popup and the toolbar menu</small>
+          </span>
+          <select id="uiLanguage">
+            <option value="auto" data-i18n="langAuto">Match browser</option>
+            <!-- Language names stay in their own language, as everywhere else that lists them. -->
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+
+        <label class="row">
+          <span data-i18n="trigger">Trigger</span>
           <select id="triggerKey">
-            <option value="Shift">Hold Shift</option>
-            <option value="Control">Hold Ctrl</option>
-            <option value="Alt">Hold Alt</option>
-            <option value="Meta" id="metaOption">Hold Win</option>
-            <option value="none">No key — show on hover</option>
+            <option value="Shift" data-i18n="holdShift">Hold Shift</option>
+            <option value="Control" data-i18n="holdCtrl">Hold Ctrl</option>
+            <option value="Alt" data-i18n="holdAlt">Hold Alt</option>
+            <option value="Meta" id="metaOption" data-i18n="holdWin">Hold Win</option>
+            <option value="none" data-i18n="noKey">No key — show on hover</option>
           </select>
         </label>
 
         <label class="row" id="hoverDelayRow">
           <span>
-            Hover delay
-            <small>How long to rest on a word before it opens</small>
+            <span data-i18n="hoverDelay">Hover delay</span>
+            <small data-i18n="hoverDelayHint">How long to rest on a word before it opens</small>
           </span>
           <span class="control">
             <input type="range" id="hoverDelay" min="0" max="1200" step="50" />
@@ -39,33 +57,33 @@
         </label>
 
         <label class="row">
-          <span>Show script</span>
+          <span data-i18n="showScript">Show script</span>
           <select id="script">
-            <option value="simplified">Simplified first</option>
-            <option value="traditional">Traditional first</option>
+            <option value="simplified" data-i18n="simplifiedFirst">Simplified first</option>
+            <option value="traditional" data-i18n="traditionalFirst">Traditional first</option>
           </select>
         </label>
       </section>
 
-      <h2>Pronunciation</h2>
+      <h2 data-i18n="pronunciation">Pronunciation</h2>
       <section>
         <label class="row">
           <span>
-            Audio source
+            <span data-i18n="audioSource">Audio source</span>
             <small id="audioHint"></small>
           </span>
           <select id="audio">
-            <option value="auto">Voice, then recording</option>
-            <option value="voice">Computer voice only</option>
-            <option value="recording">Wikimedia recordings only</option>
-            <option value="off">No audio button</option>
+            <option value="auto" data-i18n="audioAuto">Voice, then recording</option>
+            <option value="voice" data-i18n="audioVoice">Computer voice only</option>
+            <option value="recording" data-i18n="audioRecording">Wikimedia recordings only</option>
+            <option value="off" data-i18n="audioOff">No audio button</option>
           </select>
         </label>
 
         <label class="row" id="speechRateRow">
           <span>
-            Playback speed
-            <small>Recordings are only ever slowed, never sped up</small>
+            <span data-i18n="playbackSpeed">Playback speed</span>
+            <small data-i18n="playbackSpeedHint">Recordings are only ever slowed, never sped up</small>
           </span>
           <span class="control">
             <input type="range" id="speechRate" min="0.5" max="1.2" step="0.05" />
@@ -74,22 +92,19 @@
         </label>
       </section>
 
-      <p class="meta" id="voiceStatus">Checking for Chinese voices…</p>
+      <p class="meta" id="voiceStatus" data-i18n="voiceChecking">Checking for Chinese voices…</p>
 
       <details id="voiceHelp">
-        <summary>How to add a Chinese voice to Windows</summary>
+        <summary data-i18n="voiceHelpSummary">How to add a Chinese voice to Windows</summary>
         <ol>
-          <li>Open <b>Settings → Time &amp; language → Language &amp; region</b>.</li>
-          <li><b>Add a language</b> → search for <b>Chinese (Simplified, China)</b> → Next.</li>
-          <li>Tick <b>Speech</b> (and <b>Text-to-speech</b> if listed). You can untick
+          <li data-i18n-html="voiceHelpStep1">Open <b>Settings → Time &amp; language → Language &amp; region</b>.</li>
+          <li data-i18n-html="voiceHelpStep2"><b>Add a language</b> → search for <b>Chinese (Simplified, China)</b> → Next.</li>
+          <li data-i18n-html="voiceHelpStep3">Tick <b>Speech</b> (and <b>Text-to-speech</b> if listed). You can untick
             “Set as my Windows display language” — you only need the voice.</li>
-          <li>Install, then <b>restart the browser</b> so it picks the new voice up.</li>
+          <li data-i18n-html="voiceHelpStep4">Install, then <b>restart the browser</b> so it picks the new voice up.</li>
         </ol>
-        <p>
-          This installs the Microsoft zh-CN voices. Afterwards audio works offline, instantly,
-          and for all 124,766 entries — no network request at all. On macOS the equivalent is
-          <b>System Settings → Accessibility → Spoken Content → System voice → Manage Voices</b>.
-        </p>
+        <!-- Filled by options.js, which formats the entry count for the selected language. -->
+        <p id="voiceHelpNote"></p>
       </details>
 
       <h2>Anki</h2>
@@ -97,31 +112,31 @@
         <label class="row switch">
           <input type="checkbox" id="ankiEnabled" />
           <span>
-            Show an “add to Anki” button
-            <small>Needs Anki running with the AnkiConnect add-on</small>
+            <span data-i18n="ankiEnabled">Show an “add to Anki” button</span>
+            <small data-i18n="ankiEnabledHint">Needs Anki running with the AnkiConnect add-on</small>
           </span>
         </label>
 
         <div class="row" id="ankiPermissionRow">
           <span>
-            Local access
-            <small id="ankiPermissionState">Not granted</small>
+            <span data-i18n="localAccess">Local access</span>
+            <small id="ankiPermissionState" data-i18n="notGranted">Not granted</small>
           </span>
-          <button type="button" id="ankiGrant">Grant</button>
+          <button type="button" id="ankiGrant" data-i18n="grant">Grant</button>
         </div>
 
         <div class="row" id="ankiStatusRow">
           <span>
-            Connection
-            <small id="ankiStatus">Not checked</small>
+            <span data-i18n="connection">Connection</span>
+            <small id="ankiStatus" data-i18n="notChecked">Not checked</small>
           </span>
-          <button type="button" id="ankiRetry">Check</button>
+          <button type="button" id="ankiRetry" data-i18n="check">Check</button>
         </div>
 
         <label class="row">
           <span>
-            Deck
-            <small>Created automatically if it doesn’t exist yet</small>
+            <span data-i18n="deck">Deck</span>
+            <small data-i18n="deckHint">Created automatically if it doesn’t exist yet</small>
           </span>
           <span class="control">
             <input type="text" id="ankiDeck" list="ankiDeckList" spellcheck="false" />
@@ -131,8 +146,8 @@
 
         <label class="row">
           <span>
-            Note type
-            <small>Also created automatically, with tone colouring</small>
+            <span data-i18n="noteType">Note type</span>
+            <small data-i18n="noteTypeHint">Also created automatically, with tone colouring</small>
           </span>
           <span class="control">
             <input type="text" id="ankiModel" list="ankiModelList" spellcheck="false" />
@@ -141,33 +156,33 @@
         </label>
 
         <label class="row">
-          <span>Tags</span>
+          <span data-i18n="tags">Tags</span>
           <span class="control">
             <input type="text" id="ankiTags" spellcheck="false" />
           </span>
         </label>
       </section>
 
-      <h3>Fields</h3>
-      <p class="meta" id="ankiFieldsNote">
+      <h3 data-i18n="fields">Fields</h3>
+      <p class="meta" id="ankiFieldsNote" data-i18n="fieldsNote">
         Choose what goes in each field of your note type. Read from your collection, so any
         naming works.
       </p>
       <table class="fields" id="ankiFieldsTable"><tbody></tbody></table>
 
-      <h2>Appearance</h2>
+      <h2 data-i18n="appearance">Appearance</h2>
       <section>
         <label class="row">
-          <span>Theme</span>
+          <span data-i18n="theme">Theme</span>
           <select id="theme">
-            <option value="auto">Match system</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
+            <option value="auto" data-i18n="themeAuto">Match system</option>
+            <option value="light" data-i18n="themeLight">Light</option>
+            <option value="dark" data-i18n="themeDark">Dark</option>
           </select>
         </label>
 
         <label class="row">
-          <span>Font size</span>
+          <span data-i18n="fontSize">Font size</span>
           <span class="control">
             <input type="range" id="fontSize" min="11" max="22" step="1" />
             <output id="fontSizeOut"></output>
@@ -175,7 +190,7 @@
         </label>
 
         <label class="row">
-          <span>Senses shown before collapsing</span>
+          <span data-i18n="maxSenses">Senses shown before collapsing</span>
           <span class="control">
             <input type="range" id="maxSenses" min="1" max="20" step="1" />
             <output id="maxSensesOut"></output>
@@ -183,23 +198,25 @@
         </label>
       </section>
 
-      <h2>Shortcuts</h2>
+      <h2 data-i18n="shortcuts">Shortcuts</h2>
       <table class="keys">
         <tbody>
-          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Switch between candidate words</td></tr>
-          <tr><th><kbd>1</kbd>–<kbd>9</kbd></th><td>Jump straight to a candidate — the digit shown on its tab</td></tr>
-          <tr><th><kbd>Esc</kbd></th><td>Close the popup</td></tr>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td data-i18n="keySwitch">Switch between candidate words</td></tr>
+          <tr><th><kbd>1</kbd>–<kbd>9</kbd></th><td data-i18n="keyJump">Jump straight to a candidate — the digit shown on its tab</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td data-i18n="keyClose">Close the popup</td></tr>
         </tbody>
       </table>
 
-      <h2>Dictionary</h2>
-      <p id="meta" class="meta">Loading…</p>
+      <h2 data-i18n="dictionary">Dictionary</h2>
+      <p id="meta" class="meta" data-i18n="loading">Loading…</p>
       <p class="credit">
-        Definitions from <a href="https://cc-cedict.org/" target="_blank" rel="noreferrer">CC-CEDICT</a>,
-        used under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>.
+        <!-- Split around the links so the sentence can be reordered without losing the anchors. -->
+        <span data-i18n="creditPre">Definitions from</span>
+        <a href="https://cc-cedict.org/" target="_blank" rel="noreferrer">CC-CEDICT</a><span data-i18n="creditMid">, used under</span>
+        <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a><span data-i18n="creditPost">.</span>
       </p>
 
-      <p class="saved" id="saved" hidden>Saved</p>
+      <p class="saved" id="saved" data-i18n="saved" hidden>Saved</p>
     </main>
     <script type="module" src="options.js"></script>
   </body>

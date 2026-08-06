@@ -35,7 +35,15 @@ const CANDIDATE_BROWSERS = [
 ].filter(Boolean);
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
-const CONTENT_SCRIPTS = ['text-at-point.js', 'speech.js', 'popup.js', 'content.js']; // manifest order
+// Manifest order. src/lib/messages.js goes first: it is a content script too (the string
+// catalogue has to be reachable from the classic-script world), and popup.js reads it at load.
+const CONTENT_SCRIPTS = [
+  '../lib/messages.js',
+  'text-at-point.js',
+  'speech.js',
+  'popup.js',
+  'content.js',
+];
 
 /** A minimal valid 8-bit PCM WAV, so Web Audio decoding is exercised without the network. */
 function tinyWavBase64(ms = 60, hz = 8000) {
@@ -699,6 +707,58 @@ test('hover mode keeps the popup open while the pointer is over it', async () =>
   await page.mouse.move(box.x, box.y);
   await wait(300);
   assert.equal(await page.popupVisible(), true, 'popup must stay up so its tabs are clickable');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+// --- language ------------------------------------------------------------------
+
+test('the popup speaks whichever language is configured', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true, uiLanguage: 'es' },
+    { ankiInspect: null },
+  );
+  await page.openPopup('#plain', 4);
+
+  const hint = await page.evaluate(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('.hint').textContent,
+  );
+  // The trigger's own name stays "Shift" -- that's what's printed on the key.
+  assert.equal(hint, 'Shift + ratón para buscar · ←/→ cambiar · Esc para cerrar');
+
+  const [speaker] = await page.speakers();
+  assert.match(await speaker.evaluate((el) => el.getAttribute('aria-label')), /^Reproducir la pronunciación de /);
+
+  // aria-label rather than title: disableAnki overwrites the title as soon as the (absent) Anki
+  // answers, which races with reading it here.
+  const [adder] = await page.adders();
+  assert.match(await adder.evaluate((el) => el.getAttribute('aria-label')), /^Añadir .+ a Anki$/);
+
+  // Reported from content.js rather than rendered from the card.
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add')?.dataset.state ===
+      'unavailable',
+    { timeout: 5000 },
+  );
+  assert.match((await page.adderStates())[0].title, /Anki no está abierto/);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('in hover mode the Spanish hint names no key at all', async () => {
+  const page = await openPage({ triggerKey: 'none', hoverDelay: 100, uiLanguage: 'es' });
+  const at = await page.pointAt('#plain', 4);
+
+  await page.mouse.move(at.x, at.y);
+  await page.waitForSelector('[data-zh-dic-host][data-visible]', { timeout: 5000 });
+
+  const hint = await page.evaluate(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('.hint').textContent,
+  );
+  assert.equal(hint, 'Pasar el ratón para buscar · ←/→ cambiar · Esc para cerrar');
 
   page.assertNoErrors();
   await page.close();

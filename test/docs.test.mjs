@@ -24,6 +24,7 @@ const INTERNAL = new Set(['lastModifier']);
 /** The README phrase that documents each user-facing setting. */
 const DOCUMENTED_AS = {
   enabled: 'Enabled',
+  uiLanguage: 'Language',
   triggerKey: 'Trigger',
   hoverDelay: 'Hover delay',
   script: 'Show script',

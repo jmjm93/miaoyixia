@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "miaoyixia — Chinese hover dictionary",
+    "description": "Extension name, shown in the toolbar tooltip, the Extensions page and the Web Store."
+  },
+  "extDescription": {
+    "message": "Hover a Chinese word and press Shift for pinyin and definitions. Fully offline, powered by CC-CEDICT.",
+    "description": "Store listing summary. Chrome allows 132 characters."
+  }
+}

@@ -71,7 +71,8 @@ before(async () => {
   await page.evaluateOnNewDocument(`window.chrome = { runtime: { getURL: (p) => '${origin}/extension/' + p } };`);
   await page.reload({ waitUntil: 'load' });
 
-  for (const file of ['text-at-point.js', 'popup.js']) {
+  // messages.js first -- popup.js reads globalThis.zhI18n as it loads.
+  for (const file of ['../lib/messages.js', 'text-at-point.js', 'popup.js']) {
     await page.addScriptTag({ content: await readFile(join(root, 'extension/src/content', file), 'utf8') });
   }
 

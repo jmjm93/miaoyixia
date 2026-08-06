@@ -1,9 +1,14 @@
 // Options page. Every control writes straight to storage.sync on change; the content
 // script picks changes up through storage.onChanged, so there is no Save button and no
 // need to reload open tabs.
+//
+// Text comes from the string catalogue rather than the markup: options.html holds English as a
+// readable fallback, and applyTranslations() replaces it. Changing the language re-runs that
+// pass, so it takes effect without a reload like every other setting here.
 
 import { DEFAULT_SETTINGS, HOVER_ONLY, getSettings } from '../lib/settings.js';
-import { TOKENS } from '../lib/anki-fields.js';
+import { TOKENS, tokenLabel } from '../lib/anki-fields.js';
+import { language, t, tn } from '../lib/i18n.js';
 
 const ANKI_ORIGINS = ['http://127.0.0.1:8765/*', 'http://localhost:8765/*'];
 
@@ -12,18 +17,31 @@ const NUMERIC = new Set(['fontSize', 'maxSenses', 'hoverDelay', 'speechRate']);
 /** Units appended to a range control's readout. */
 const UNITS = { fontSize: 'px', hoverDelay: 'ms', speechRate: '×' };
 
+/** Which catalogue key explains each audio source. */
 const AUDIO_HINTS = {
-  auto: 'Uses an installed Chinese voice; falls back to a Wikimedia recording when there is none.',
-  voice: 'Offline and instant, covers every entry — but needs a Chinese voice installed.',
-  recording: 'Real speakers from Wikimedia Commons. Only common words have one.',
-  off: 'Hides the play button entirely.',
+  auto: 'audioHintAuto',
+  voice: 'audioHintVoice',
+  recording: 'audioHintRecording',
+  off: 'audioHintOff',
 };
+
+/**
+ * Entry count quoted in the "install a voice" note, as a claim about the bundled dictionary
+ * rather than a live reading. The Dictionary section further down reports the real number from
+ * the build; this only needs to make the point that a voice covers all of it.
+ */
+const BUNDLED_ENTRIES = 124766;
 
 /** Choices that are meaningless without an installed Chinese TTS voice. */
 const VOICE_DEPENDENT = ['auto', 'voice'];
 
 /** Set by reportVoices(); drives which audio choices are offered. */
 let hasChineseVoice = false;
+
+/** Last successful getMeta result, kept so the line can be redrawn in another language. */
+let dictMeta = null;
+/** True once the dictionary build has been found missing, for the same reason. */
+let dictError = false;
 
 const saved = document.getElementById('saved');
 let savedTimer = null;
@@ -33,6 +51,66 @@ function flashSaved() {
   clearTimeout(savedTimer);
   savedTimer = setTimeout(() => { saved.hidden = true; }, 1200);
 }
+
+// --- translation ---------------------------------------------------------------
+
+/**
+ * Replace every marked node with the string for the current language.
+ *
+ * `data-i18n` sets textContent; `data-i18n-html` sets innerHTML, which a handful of strings need
+ * for the <b> runs in the Windows voice instructions. Only ever fed catalogue strings, never
+ * anything from a page or a collection.
+ *
+ * Idempotent, so it can simply be run again when the language changes.
+ */
+function applyTranslations() {
+  document.documentElement.lang = language();
+
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    el.textContent = t(el.dataset.i18n);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-html]')) {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  }
+
+  // Carries the entry count, so it needs the number formatted for this language.
+  document.getElementById('voiceHelpNote').innerHTML = t(
+    'voiceHelpNote',
+    BUNDLED_ENTRIES.toLocaleString(language()),
+  );
+}
+
+/**
+ * Redraw the four bits of text that report live state.
+ *
+ * They carry a `data-i18n` placeholder for their pre-answer value, which means applyTranslations
+ * resets them to "Not checked", "Loading…" and so on. Anything already known has to be put back.
+ */
+function renderLiveText() {
+  renderVoiceStatus();
+  renderDictMeta();
+  // refreshAnki redraws the field rows itself; without it nothing else would.
+  if (ankiEl.enabled.checked) refreshAnki();
+  else renderFieldRows(modelFields ?? Object.keys(settings.ankiFields));
+}
+
+function renderDictMeta() {
+  const el = document.getElementById('meta');
+  if (dictError) {
+    el.textContent = t('dictMissing');
+    return;
+  }
+  if (!dictMeta) return; // still loading: the markup's "Loading…" is already correct
+  const lang = language();
+  el.textContent = t(
+    'dictMeta',
+    dictMeta.entries.toLocaleString(lang),
+    dictMeta.headwords.toLocaleString(lang),
+    dictMeta.release.slice(0, 10),
+  );
+}
+
+// --- controls ------------------------------------------------------------------
 
 function readControl(input) {
   if (input.type === 'checkbox') return input.checked;
@@ -56,7 +134,7 @@ function syncConditionalRows() {
 
   const audio = document.getElementById('audio').value;
   document.getElementById('speechRateRow').hidden = audio === 'off';
-  document.getElementById('audioHint').textContent = AUDIO_HINTS[audio] ?? '';
+  document.getElementById('audioHint').textContent = AUDIO_HINTS[audio] ? t(AUDIO_HINTS[audio]) : '';
 
   // Keyed on whether a voice exists rather than on the current choice: the instructions are
   // needed most when the voice options have just been greyed out.
@@ -93,41 +171,44 @@ function syncVoiceDependentOptions() {
   syncConditionalRows();
 }
 
-/**
- * Report which Chinese voices the browser can see. getVoices() fills in asynchronously, so
- * this listens for `voiceschanged` rather than trusting the first, usually empty, answer.
- */
-function reportVoices() {
+/** Report which Chinese voices the browser can see, in the current language. */
+function renderVoiceStatus() {
   const status = document.getElementById('voiceStatus');
   const help = document.getElementById('voiceHelp');
 
-  const render = () => {
-    const chinese = speechSynthesis.getVoices().filter((voice) => /^zh\b|^zh-/i.test(voice.lang ?? ''));
-    hasChineseVoice = chinese.length > 0;
+  const chinese = speechSynthesis.getVoices().filter((voice) => /^zh\b|^zh-/i.test(voice.lang ?? ''));
+  hasChineseVoice = chinese.length > 0;
 
-    if (hasChineseVoice) {
-      status.textContent = `Chinese voice found: ${chinese.map((v) => `${v.name} [${v.lang}]`).join(', ')}`;
-      help.open = false;
-    } else {
-      status.textContent =
-        'No Chinese voice is installed, so the computer-voice options are unavailable and ' +
-        'Wikimedia recordings are being used instead. Installing a voice is worth it: it is ' +
-        'the better option of the two — instant, fully offline, and it covers every entry in ' +
-        'the dictionary, whereas Commons only has recordings for common words.';
-      help.open = true;
-    }
+  if (hasChineseVoice) {
+    status.textContent = t('voiceFound', chinese.map((v) => `${v.name} [${v.lang}]`).join(', '));
+    help.open = false;
+  } else {
+    status.textContent = t('voiceMissing');
+    help.open = true;
+  }
 
-    syncVoiceDependentOptions();
-  };
+  syncVoiceDependentOptions();
+}
 
-  render();
-  speechSynthesis.addEventListener('voiceschanged', render);
+/**
+ * getVoices() fills in asynchronously, so listen for `voiceschanged` rather than trusting the
+ * first, usually empty, answer.
+ */
+function reportVoices() {
+  renderVoiceStatus();
+  speechSynthesis.addEventListener('voiceschanged', renderVoiceStatus);
 }
 
 const settings = await getSettings();
+applyTranslations();
 
-// Name the Meta key after whatever the user's keyboard calls it.
-if (navigator.platform.startsWith('Mac')) document.getElementById('metaOption').textContent = 'Hold Cmd';
+// Name the Meta key after whatever the user's keyboard calls it. Rewriting the key rather than
+// the text means a later language change still picks the Mac wording.
+if (navigator.platform.startsWith('Mac')) {
+  const option = document.getElementById('metaOption');
+  option.dataset.i18n = 'holdCmd';
+  option.textContent = t('holdCmd');
+}
 
 for (const key of Object.keys(DEFAULT_SETTINGS)) {
   const input = document.getElementById(key);
@@ -157,6 +238,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // the caret to the end on every keystroke, since typing writes to storage as it goes.
     if (input && input !== document.activeElement) writeControl(input, newValue);
   }
+
+  // getSettings() is what pins the language, so re-read before repainting the text.
+  if (changes.uiLanguage) {
+    getSettings().then(() => {
+      applyTranslations();
+      renderLiveText();
+      syncConditionalRows();
+    });
+    return;
+  }
+
   syncConditionalRows();
   syncVoiceDependentOptions();
 });
@@ -218,7 +310,7 @@ function renderFieldRows(fields) {
     for (const token of TOKENS) {
       const option = document.createElement('option');
       option.value = token.id;
-      option.textContent = token.label;
+      option.textContent = tokenLabel(token);
       select.append(option);
     }
     select.value = settings.ankiFields[field] ?? 'none';
@@ -242,22 +334,22 @@ async function hasAnkiPermission() {
 /** Ask Anki for the collection's shape, and populate the dropdowns from it. */
 async function refreshAnki() {
   const granted = await hasAnkiPermission();
-  ankiEl.permissionState.textContent = granted ? 'Granted' : 'Not granted';
+  ankiEl.permissionState.textContent = t(granted ? 'granted' : 'notGranted');
   ankiEl.grant.hidden = granted;
 
   if (!granted) {
-    ankiEl.status.textContent = 'Grant local access first';
+    ankiEl.status.textContent = t('grantFirst');
     renderFieldRows(Object.keys(settings.ankiFields));
     return;
   }
 
-  ankiEl.status.textContent = 'Checking…';
+  ankiEl.status.textContent = t('checking');
   try {
     const response = await chrome.runtime.sendMessage({ type: 'ankiCollection' });
     if (!response?.ok) throw new Error(response?.error ?? 'no response');
     const { version, decks, models } = response.result;
 
-    ankiEl.status.textContent = `Connected — AnkiConnect v${version}, ${decks.length} decks`;
+    ankiEl.status.textContent = tn('ankiConnected', decks.length, version, decks.length);
     fillOptions(ankiEl.deckList, decks);
     fillOptions(ankiEl.modelList, models);
 
@@ -269,10 +361,10 @@ async function refreshAnki() {
     } else {
       // A note type that doesn't exist yet will be created from this very mapping.
       renderFieldRows(Object.keys(settings.ankiFields));
-      ankiEl.status.textContent += ` · “${settings.ankiModel}” will be created on first use`;
+      ankiEl.status.textContent += t('ankiWillCreate', settings.ankiModel);
     }
   } catch (error) {
-    ankiEl.status.textContent = `Not reachable — is Anki running? (${String(error.message ?? error)})`;
+    ankiEl.status.textContent = t('ankiUnreachable', String(error.message ?? error));
     renderFieldRows(Object.keys(settings.ankiFields));
   }
 }
@@ -313,10 +405,14 @@ if (ankiEl.enabled.checked) refreshAnki();
 try {
   const response = await chrome.runtime.sendMessage({ type: 'getMeta' });
   if (!response?.ok) throw new Error(response?.error ?? 'no response');
-  const meta = response.result;
-  document.getElementById('meta').textContent =
-    `${meta.entries.toLocaleString()} entries · ${meta.headwords.toLocaleString()} headwords · CC-CEDICT release ${meta.release.slice(0, 10)}`;
+  dictMeta = response.result;
+  renderDictMeta();
 } catch {
-  document.getElementById('meta').textContent =
-    'Dictionary data not found — run `npm run build` in the project root, then reload the extension.';
+  dictError = true;
+  renderDictMeta();
 }
+
+// Everything above is top-level await, so this is the point at which the page is fully settled:
+// translated, controls populated, voices reported and the dictionary asked about. The browser
+// tests wait on it rather than guessing at a particular string having appeared.
+document.body.dataset.ready = '';

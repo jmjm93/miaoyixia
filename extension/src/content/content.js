@@ -19,6 +19,8 @@
   if (!zh?.resolveAtPoint || window.__zhDicLoaded) return;
   window.__zhDicLoaded = true;
 
+  const { t, setLanguage } = globalThis.zhI18n;
+
   const HIGHLIGHT = 'zh-dic-match';
   /** Pointer distance from the looked-up word that dismisses an unheld popup. */
   const LEAVE_DISTANCE = 120;
@@ -75,6 +77,9 @@
 
   async function init() {
     settings = await send({ type: 'getSettings' });
+    // Settings arrive over a message here rather than from getSettings(), so the language has
+    // to be pinned by hand -- see the note in settings.js.
+    setLanguage(settings.uiLanguage);
     installHighlightStyle();
     popup = new zh.Popup(settings);
     popup.onSelect = (candidate) => paintHighlight(candidate?.length ?? 0);
@@ -115,6 +120,8 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync') return;
       for (const [key, { newValue }] of Object.entries(changes)) settings[key] = newValue;
+      // Before updateSettings, which re-renders the hint bar in whatever language is active.
+      if (changes.uiLanguage) setLanguage(settings.uiLanguage);
       popup.updateSettings(settings);
 
       // Switching trigger mid-session leaves a popup that belongs to the old mode, and a
@@ -457,7 +464,7 @@
       // A newer lookup may have replaced the panel these buttons belong to.
       if (lastKey === shownFor) popup.applyAnkiStates(result);
     } catch (error) {
-      if (lastKey === shownFor) popup.disableAnki('Anki is not running, or AnkiConnect is unavailable');
+      if (lastKey === shownFor) popup.disableAnki(t('ankiAbsent'));
       console.debug('[zh-dic] anki inspect failed', error);
     }
   }

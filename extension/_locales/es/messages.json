@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "miaoyixia — diccionario de chino al pasar el ratón",
+    "description": "Extension name, shown in the toolbar tooltip, the Extensions page and the Web Store."
+  },
+  "extDescription": {
+    "message": "Pasa el ratón sobre una palabra china y pulsa Shift para ver el pinyin y su definición. Sin conexión, con CC-CEDICT.",
+    "description": "Store listing summary. Chrome allows 132 characters."
+  }
+}

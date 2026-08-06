@@ -5,6 +5,7 @@
 // checked rather than the status code.
 
 import { primaryField } from './anki-fields.js';
+import { t } from './i18n.js';
 
 export const ANKI_ORIGIN = 'http://127.0.0.1:8765';
 const API_VERSION = 6;
@@ -145,13 +146,13 @@ export async function ensureTarget(client, { deck, model, fields }) {
   const decks = await client.deckNames();
   if (!decks.includes(deck)) {
     await client.createDeck(deck);
-    created.push(`deck "${deck}"`);
+    created.push(t('createdDeck', deck));
   }
 
   const models = await client.modelNames();
   if (!models.includes(model)) {
     await client.createModel(model, fields);
-    created.push(`note type "${model}"`);
+    created.push(t('createdNoteType', model));
   }
 
   return created;

@@ -59,15 +59,21 @@ after(async () => {
   server?.close();
 });
 
-/** Load the real options page with a stubbed storage and voice list, and report its state. */
-async function loadOptions({ audio, voices }) {
+/**
+ * Open the real options page against a stubbed storage and voice list.
+ *
+ * storage.onChanged listeners are collected on window.__onChanged rather than dropped, so a test
+ * can drive the "a setting changed elsewhere" path -- which is how the language switch is applied.
+ */
+async function openOptions({ audio, voices, store = {} }) {
   const page = await browser.newPage();
   const failures = [];
   page.on('pageerror', (e) => failures.push(e.message));
 
   await page.evaluateOnNewDocument(`
-    window.__store = { audio: ${JSON.stringify(audio)} };
+    window.__store = { audio: ${JSON.stringify(audio)}, ...${JSON.stringify(store)} };
     window.__set = [];
+    window.__onChanged = [];
     // speechSynthesis is a read-only accessor on Window, so it needs defineProperty.
     Object.defineProperty(window, 'speechSynthesis', {
       configurable: true,
@@ -80,15 +86,24 @@ async function loadOptions({ audio, voices }) {
           set: async (patch) => { window.__set.push(patch); Object.assign(window.__store, patch); },
         },
         // The page mirrors external edits (e.g. from the toolbar button) through this.
-        onChanged: { addListener() {} },
+        onChanged: { addListener: (fn) => window.__onChanged.push(fn) },
       },
       // getMeta is irrelevant here; failing it exercises the "no dictionary built" path too.
       runtime: { sendMessage: async () => ({ ok: false, error: 'not needed' }) },
+      // Refused, so the Anki rows render from the configured mapping without reaching Anki --
+      // which is enough to see the field-token labels in the right language.
+      permissions: { contains: async () => false, request: async () => false },
     };
   `);
 
   await page.goto(`${origin}/extension/src/options/options.html`, { waitUntil: 'load' });
-  await page.waitForFunction(() => document.getElementById('voiceStatus').textContent !== 'Checking for Chinese voices…');
+  await page.waitForFunction(() => document.body.dataset.ready !== undefined);
+  return { page, failures };
+}
+
+/** Load the page and report the audio-source state it settled on. */
+async function loadOptions(options) {
+  const { page, failures } = await openOptions(options);
 
   const state = await page.evaluate(() => {
     const select = document.getElementById('audio');
@@ -161,4 +176,79 @@ test('a stored "recording" is untouched whether or not a voice exists', async ()
     assert.equal(state.selected, 'recording');
     assert.deepEqual(state.persisted, []);
   }
+});
+
+// --- language ------------------------------------------------------------------
+
+/** The text of the labelled controls, so a translation can be checked without ids everywhere. */
+const READ_LABELS = `({
+  lang: document.documentElement.lang,
+  title: document.title,
+  tagline: document.querySelector('.lede').textContent,
+  enabled: document.querySelector('#enabled + span').textContent,
+  language: document.querySelector('[data-i18n="uiLanguage"]').textContent,
+  pronunciation: document.querySelector('[data-i18n="pronunciation"]').textContent,
+  noKey: document.querySelector('#triggerKey option[value="none"]').textContent,
+  audioHint: document.getElementById('audioHint').textContent,
+  voiceStatus: document.getElementById('voiceStatus').textContent,
+  firstToken: document.querySelector('#ankiFieldsTable select option').textContent,
+  voiceHelpNote: document.getElementById('voiceHelpNote').textContent,
+})`;
+
+test('the page renders in Spanish when that is the stored language', async () => {
+  const { page, failures } = await openOptions({
+    audio: 'auto',
+    voices: [],
+    store: { uiLanguage: 'es', ankiEnabled: true },
+  });
+
+  const text = await page.evaluate(READ_LABELS);
+
+  assert.equal(text.lang, 'es', '<html lang> should follow the chosen language');
+  assert.equal(text.title, 'Ajustes de 瞄一下');
+  assert.equal(text.tagline, 'Diccionario emergente de chino.');
+  assert.equal(text.enabled, 'Activado');
+  assert.equal(text.language, 'Idioma');
+  assert.equal(text.pronunciation, 'Pronunciación');
+  assert.match(text.noKey, /Sin tecla/);
+
+  // Strings assembled in JS rather than replaced in the markup.
+  // Shows the recording hint, not the "auto" one: with no voice installed the select is
+  // displayed as the option that will actually be used. Either way it comes from AUDIO_HINTS.
+  assert.match(text.audioHint, /Personas reales, desde Wikimedia Commons/);
+  assert.match(text.voiceStatus, /No hay ninguna voz en chino/, 'live voice status');
+  assert.equal(text.firstToken, '— dejar vacío —', 'the Anki field tokens are built in JS');
+
+  // Substituted, and with the number formatted for Spanish rather than for English.
+  assert.match(text.voiceHelpNote, /124\.766 entradas/);
+
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+test('changing the language repaints the page without a reload', async () => {
+  const { page, failures } = await openOptions({
+    audio: 'auto',
+    voices: [],
+    store: { uiLanguage: 'es', ankiEnabled: true },
+  });
+
+  // Exactly what the storage listener receives when the setting is changed anywhere.
+  await page.evaluate(() => {
+    window.__store.uiLanguage = 'en';
+    for (const fn of window.__onChanged) fn({ uiLanguage: { newValue: 'en' } }, 'sync');
+  });
+  await page.waitForFunction(() => document.documentElement.lang === 'en');
+
+  const text = await page.evaluate(READ_LABELS);
+  assert.equal(text.enabled, 'Enabled');
+  assert.equal(text.pronunciation, 'Pronunciation');
+  assert.equal(text.firstToken, '— leave empty —', 'the field rows must be rebuilt, not left stale');
+  // These carry a placeholder in the markup, so the repaint must put the real answer back
+  // rather than leaving "Checking for Chinese voices…" behind.
+  assert.match(text.voiceStatus, /No Chinese voice is installed/);
+  assert.match(text.voiceHelpNote, /124,766 entries/);
+
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
 });
