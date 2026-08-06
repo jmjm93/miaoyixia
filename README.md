@@ -3,58 +3,6 @@
 An extension for Chromium-based browsers that opens a popup over the Chinese word you're hovering with its definition.
 It contains sound and Anki support.
 
-## The toolbar button
-
-The icon is a 招财猫 holding a coin. **Left click turns the extension on and off** — the cat is
-awake and waving while it's running, and greyed out asleep over its coin when it isn't. The
-artwork carries the state on its own; the tooltip says both the current state and what a click
-will do.
-
-### Regenerating the icons
-
-The artwork lives in [art/](art/) at 1024px — `ONicon.png` awake, `OFFicon.png` asleep.
-[tools/make-icons.mjs](tools/make-icons.mjs) resizes it into the eight PNGs the manifest needs
-(16/32/48/128 × two states):
-
-```sh
-npm run icons                  # rewrite extension/icons/
-npm run icons:preview          # ... and a sheet showing every size, to eyeball the result
-```
-
-Chrome accepts only raster icons and Node has no image decoder built in, so the browser already
-present for the tests does the resizing. The results are committed, so an ordinary build needs
-no browser — only re-running this does.
-
-Two details the source images made necessary, both measured rather than assumed:
-
-- **Each is cropped to its own artwork bounds.** About a third of each 1024px canvas is
-  transparent padding; scaled whole, the cat would sit noticeably smaller than neighbouring
-  toolbar icons.
-- **They're cropped independently, then squared.** The two tiles aren't the same size — 637px
-  awake against 695px asleep — so one shared crop would make the icon visibly change size when
-  toggled. Squaring by the longer side keeps both undistorted and lands them identical.
-
-Downscaling goes by successive halving rather than one 695→16 draw, which is what keeps the
-outlines from dissolving at 16px.
-
-The art is kept out of `extension/` deliberately: at ~1.5 MB each, shipping the sources would
-add 3 MB to the packaged extension for no reason.
-
-**Right click** opens a short menu:
-
-| | |
-| --- | --- |
-| ☑ **Enabled** | the same toggle as clicking, spelled out |
-| ☑ **Require *Shift* to look up** | unticking drops straight to hover mode; it names whichever modifier you actually use |
-| **Options…** | opens the settings page |
-
-A browser button can have a popup *or* a click handler, never both, so one-click disabling and
-a panel are mutually exclusive — hence click-to-toggle with the menu on right click.
-
-Unticking the modifier item sets the trigger to hover-only; ticking it again restores the
-modifier you had before rather than resetting to Shift. That needs remembering separately,
-because the trigger setting can't recall what it was once it holds “no key”.
-
 ## Settings
 
 Right-click the toolbar icon and choose **Options…**, or **Details → Extension options**.
