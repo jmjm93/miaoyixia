@@ -16,6 +16,11 @@ export const DEFAULT_SETTINGS = {
   /** One of TRIGGER_KEYS. */
   triggerKey: 'Shift',
   /**
+   * The modifier to return to when the toolbar menu's "require a key" item is ticked again.
+   * `triggerKey` can't remember this itself once it has been set to 'none'.
+   */
+  lastModifier: 'Shift',
+  /**
    * How long the pointer must rest on a word before a keyless lookup fires, in ms.
    * Only used when triggerKey is 'none' -- without a dwell the popup would flash open
    * on every word the pointer crosses on its way somewhere else.

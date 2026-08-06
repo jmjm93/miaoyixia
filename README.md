@@ -3,14 +3,37 @@
 An extension for Chromium-based browsers that opens a popup over the Chinese word you're hovering with its definition.
 It contains sound and Anki support.
 
+## The toolbar button
+
+**Left click turns the extension on and off.** The icon greys out and shows an `off` badge
+while it's disabled, and the tooltip always says both the current state and what a click will
+do.
+
+**Right click** opens a short menu:
+
+| | |
+| --- | --- |
+| ☑ **Enabled** | the same toggle as clicking, spelled out |
+| ☑ **Require *Shift* to look up** | unticking drops straight to hover mode; it names whichever modifier you actually use |
+| **Options…** | opens the settings page |
+
+A browser button can have a popup *or* a click handler, never both, so one-click disabling and
+a panel are mutually exclusive — hence click-to-toggle with the menu on right click.
+
+Unticking the modifier item sets the trigger to hover-only; ticking it again restores the
+modifier you had before rather than resetting to Shift. That needs remembering separately,
+because the trigger setting can't recall what it was once it holds “no key”.
+
 ## Settings
 
-Click the toolbar icon, or **Details → Extension options**. Changes apply to open tabs
-immediately — no page reload.
+Right-click the toolbar icon and choose **Options…**, or **Details → Extension options**.
+Changes apply to open tabs immediately — no page reload, and the page mirrors changes made
+from the toolbar while it's open.
 
 ### Lookups
 
-**Enabled** switches the whole thing off without uninstalling it.
+**Enabled** switches the whole thing off without uninstalling it — the same toggle as clicking
+the toolbar button.
 
 **Trigger** is the main one. Either a held modifier — <kbd>Shift</kbd>, <kbd>Ctrl</kbd>,
 <kbd>Alt</kbd> or <kbd>Win</kbd>/<kbd>Cmd</kbd> — or **No key, show on hover**, which looks

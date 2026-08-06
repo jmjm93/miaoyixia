@@ -74,10 +74,14 @@ async function loadOptions({ audio, voices }) {
       value: { getVoices: () => ${JSON.stringify(voices)}, addEventListener() {} },
     });
     window.chrome = {
-      storage: { sync: {
-        get: async (defaults) => ({ ...defaults, ...window.__store }),
-        set: async (patch) => { window.__set.push(patch); Object.assign(window.__store, patch); },
-      } },
+      storage: {
+        sync: {
+          get: async (defaults) => ({ ...defaults, ...window.__store }),
+          set: async (patch) => { window.__set.push(patch); Object.assign(window.__store, patch); },
+        },
+        // The page mirrors external edits (e.g. from the toolbar button) through this.
+        onChanged: { addListener() {} },
+      },
       // getMeta is irrelevant here; failing it exercises the "no dictionary built" path too.
       runtime: { sendMessage: async () => ({ ok: false, error: 'not needed' }) },
     };

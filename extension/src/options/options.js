@@ -145,6 +145,22 @@ for (const key of Object.keys(DEFAULT_SETTINGS)) {
   });
 }
 
+// Settings can now change from the toolbar button too, so mirror external edits rather than
+// leaving a stale control on screen. writeControl fires no events, so this can't loop.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  for (const [key, { newValue }] of Object.entries(changes)) {
+    if (newValue === undefined) continue;
+    settings[key] = newValue;
+    const input = document.getElementById(key);
+    // Never rewrite the control the user is currently in: for a text field that would move
+    // the caret to the end on every keystroke, since typing writes to storage as it goes.
+    if (input && input !== document.activeElement) writeControl(input, newValue);
+  }
+  syncConditionalRows();
+  syncVoiceDependentOptions();
+});
+
 syncConditionalRows();
 reportVoices();
 

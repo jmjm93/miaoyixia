@@ -11,8 +11,15 @@ import { dirname, join } from 'node:path';
 
 const SIZES = [16, 32, 48, 128];
 const SUPERSAMPLE = 4;
-const BG = [37, 99, 235]; // matches --zh-accent in popup.css
-const FG = [255, 255, 255];
+
+/**
+ * Two variants: the normal icon, and a desaturated one shown while the extension is switched
+ * off. Grey-vs-blue is legible at 16px in a way a small badge alone isn't.
+ */
+const VARIANTS = {
+  '': { bg: [37, 99, 235], fg: [255, 255, 255] }, // --zh-accent from popup.css
+  '-off': { bg: [138, 143, 152], fg: [242, 243, 245] },
+};
 
 /** Signed-distance test for a rounded square covering the whole canvas. */
 function insideTile(x, y, n, radius) {
@@ -41,7 +48,7 @@ function glyphRects(n) {
   ];
 }
 
-function renderRGBA(size) {
+function renderRGBA(size, { bg, fg }) {
   const n = size * SUPERSAMPLE;
   const hi = new Uint8Array(n * n * 4);
   const radius = n * 0.22;
@@ -54,7 +61,7 @@ function renderRGBA(size) {
       if (!insideTile(px, py, n, radius)) continue;
 
       const onGlyph = rects.some(([rx, ry, rw, rh]) => px >= rx && px <= rx + rw && py >= ry && py <= ry + rh);
-      const [r, g, b] = onGlyph ? FG : BG;
+      const [r, g, b] = onGlyph ? fg : bg;
       const i = (y * n + x) * 4;
       hi[i] = r;
       hi[i + 1] = g;
@@ -137,8 +144,11 @@ function encodePNG(rgba, size) {
 const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'extension', 'icons');
 await mkdir(outDir, { recursive: true });
 
-for (const size of SIZES) {
-  const png = encodePNG(renderRGBA(size), size);
-  await writeFile(join(outDir, `icon-${size}.png`), png);
-  console.log(`icons/icon-${size}.png  ${png.length} bytes`);
+for (const [suffix, palette] of Object.entries(VARIANTS)) {
+  for (const size of SIZES) {
+    const png = encodePNG(renderRGBA(size, palette), size);
+    const name = `icon${suffix}-${size}.png`;
+    await writeFile(join(outDir, name), png);
+    console.log(`icons/${name}  ${png.length} bytes`);
+  }
 }
