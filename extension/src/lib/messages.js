@@ -188,13 +188,13 @@
     es: {
       // --- options page: chrome ---
       optionsTitle: 'Ajustes de 瞄一下',
-      tagline: 'Diccionario emergente de chino.',
+      tagline: 'Diccionario popup de chino.',
       saved: 'Guardado',
 
       // --- options page: lookups ---
       enabled: 'Activado',
       uiLanguage: 'Idioma',
-      uiLanguageHint: 'Idioma de esta página, de la ventana emergente y del menú de la barra',
+      uiLanguageHint: 'Idioma de esta página, del popup y del menú de control (no de las traducciones en sí)',
       langAuto: 'Como el navegador',
       trigger: 'Activación',
       holdShift: 'Mantener Shift',
@@ -204,7 +204,7 @@
       holdCmd: 'Mantener Cmd',
       noKey: 'Sin tecla — mostrar al pasar el ratón',
       hoverDelay: 'Retardo del ratón',
-      hoverDelayHint: 'Cuánto hay que detenerse sobre una palabra antes de que se abra',
+      hoverDelayHint: 'Cuánto hay que parar el cursor sobre una palabra antes de que se abra el popup',
       showScript: 'Escritura',
       simplifiedFirst: 'Simplificado primero',
       traditionalFirst: 'Tradicional primero',
@@ -217,11 +217,11 @@
       audioRecording: 'Solo grabaciones de Wikimedia',
       audioOff: 'Sin botón de audio',
       audioHintAuto:
-        'Usa una voz china instalada; si no hay ninguna, recurre a una grabación de Wikimedia.',
+        'Usa una voz china instalada en el ordenador; si no hay, recurre a grabación de Wikimedia.',
       audioHintVoice:
         'Sin conexión e instantáneo, cubre todas las entradas — pero necesita una voz china instalada.',
       audioHintRecording:
-        'Personas reales, desde Wikimedia Commons. Solo las palabras comunes tienen grabación.',
+        'Grabaciones de personas reales de Wikimedia Commons. Pero no todas las palabras tienen audio.',
       audioHintOff: 'Oculta por completo el botón de reproducción.',
       playbackSpeed: 'Velocidad de reproducción',
       playbackSpeedHint: 'Las grabaciones solo se ralentizan, nunca se aceleran',
@@ -229,7 +229,7 @@
       voiceFound: 'Voz en chino encontrada: $1',
       voiceMissing:
         'No hay ninguna voz en chino instalada, así que las opciones de voz del ordenador no ' +
-        'están disponibles y se usan grabaciones de Wikimedia en su lugar. Vale la pena instalar ' +
+        'están disponibles y se usan grabaciones de Wikimedia en su lugar. Recomiendo instalar ' +
         'una voz: es la mejor de las dos opciones — instantánea, totalmente sin conexión, y cubre ' +
         'todas las entradas del diccionario, mientras que Commons solo tiene grabaciones de ' +
         'palabras comunes.',
@@ -249,7 +249,7 @@
 
       // --- options page: Anki ---
       ankiEnabled: 'Mostrar un botón «añadir a Anki»',
-      ankiEnabledHint: 'Requiere Anki abierto con el complemento AnkiConnect',
+      ankiEnabledHint: 'Requiere Anki abierto con el addon AnkiConnect',
       localAccess: 'Acceso local',
       granted: 'Concedido',
       notGranted: 'No concedido',
