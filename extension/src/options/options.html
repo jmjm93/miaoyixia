@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>zh-dic settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>zh-dic</h1>
+      <p class="lede">Pinyin and definitions for the Chinese word under your pointer.</p>
+
+      <section>
+        <label class="row switch">
+          <input type="checkbox" id="enabled" />
+          <span>Enabled</span>
+        </label>
+
+        <label class="row">
+          <span>Trigger</span>
+          <select id="triggerKey">
+            <option value="Shift">Hold Shift</option>
+            <option value="Control">Hold Ctrl</option>
+            <option value="Alt">Hold Alt</option>
+            <option value="Meta" id="metaOption">Hold Win</option>
+            <option value="none">No key — show on hover</option>
+          </select>
+        </label>
+
+        <label class="row" id="hoverDelayRow">
+          <span>
+            Hover delay
+            <small>How long to rest on a word before it opens</small>
+          </span>
+          <span class="control">
+            <input type="range" id="hoverDelay" min="0" max="1200" step="50" />
+            <output id="hoverDelayOut"></output>
+          </span>
+        </label>
+
+        <label class="row">
+          <span>Show script</span>
+          <select id="script">
+            <option value="simplified">Simplified first</option>
+            <option value="traditional">Traditional first</option>
+          </select>
+        </label>
+      </section>
+
+      <h2>Pronunciation</h2>
+      <section>
+        <label class="row">
+          <span>
+            Audio source
+            <small id="audioHint"></small>
+          </span>
+          <select id="audio">
+            <option value="auto">Voice, then recording</option>
+            <option value="voice">Computer voice only</option>
+            <option value="recording">Wikimedia recordings only</option>
+            <option value="off">No audio button</option>
+          </select>
+        </label>
+
+        <label class="row" id="speechRateRow">
+          <span>
+            Playback speed
+            <small>Recordings are only ever slowed, never sped up</small>
+          </span>
+          <span class="control">
+            <input type="range" id="speechRate" min="0.5" max="1.2" step="0.05" />
+            <output id="speechRateOut"></output>
+          </span>
+        </label>
+      </section>
+
+      <p class="meta" id="voiceStatus">Checking for Chinese voices…</p>
+
+      <details id="voiceHelp">
+        <summary>How to add a Chinese voice to Windows</summary>
+        <ol>
+          <li>Open <b>Settings → Time &amp; language → Language &amp; region</b>.</li>
+          <li><b>Add a language</b> → search for <b>Chinese (Simplified, China)</b> → Next.</li>
+          <li>Tick <b>Speech</b> (and <b>Text-to-speech</b> if listed). You can untick
+            “Set as my Windows display language” — you only need the voice.</li>
+          <li>Install, then <b>restart the browser</b> so it picks the new voice up.</li>
+        </ol>
+        <p>
+          This installs the Microsoft zh-CN voices. Afterwards audio works offline, instantly,
+          and for all 124,766 entries — no network request at all. On macOS the equivalent is
+          <b>System Settings → Accessibility → Spoken Content → System voice → Manage Voices</b>.
+        </p>
+      </details>
+
+      <h2>Appearance</h2>
+      <section>
+        <label class="row">
+          <span>Theme</span>
+          <select id="theme">
+            <option value="auto">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+
+        <label class="row">
+          <span>Font size</span>
+          <span class="control">
+            <input type="range" id="fontSize" min="11" max="22" step="1" />
+            <output id="fontSizeOut"></output>
+          </span>
+        </label>
+
+        <label class="row">
+          <span>Senses shown before collapsing</span>
+          <span class="control">
+            <input type="range" id="maxSenses" min="1" max="20" step="1" />
+            <output id="maxSensesOut"></output>
+          </span>
+        </label>
+      </section>
+
+      <h2>Shortcuts</h2>
+      <table class="keys">
+        <tbody>
+          <tr><th><kbd>←</kbd> <kbd>→</kbd></th><td>Switch between candidate words</td></tr>
+          <tr><th><kbd>1</kbd>–<kbd>9</kbd></th><td>Jump straight to a candidate — the digit shown on its tab</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Close the popup</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Dictionary</h2>
+      <p id="meta" class="meta">Loading…</p>
+      <p class="credit">
+        Definitions from <a href="https://cc-cedict.org/" target="_blank" rel="noreferrer">CC-CEDICT</a>,
+        used under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0</a>.
+      </p>
+
+      <p class="saved" id="saved" hidden>Saved</p>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

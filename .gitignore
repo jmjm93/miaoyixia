@@ -1,0 +1,13 @@
+# Raw CC-CEDICT download (re-fetch with `npm run fetch-dict`)
+vendor/
+
+# Generated dictionary shards (rebuild with `npm run build-dict`)
+extension/data/
+
+# Test artefacts
+test/screenshots/
+
+node_modules/
+*.zip
+*.crx
+*.pem

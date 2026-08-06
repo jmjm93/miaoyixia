@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell($ProgressPreference='SilentlyContinue'; $out=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\cedict.txt.gz\"; try { Invoke-WebRequest -Uri \"https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz\" -OutFile $out -TimeoutSec 60 -ErrorAction Stop; \"OK size=\" + \\(Get-Item $out\\).Length } catch { \"FAILED: \" + $_.Exception.Message })",
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\"; node -e \"const fs=require\\('fs'\\),zlib=require\\('zlib'\\);const p=process.argv[1];const t=zlib.gunzipSync\\(fs.readFileSync\\(p+'/cedict.txt.gz'\\)\\).toString\\('utf8'\\);fs.writeFileSync\\(p+'/cedict.u8',t\\);const lines=t.split\\('\\\\n'\\);console.log\\('lines',lines.length\\);console.log\\(lines.slice\\(0,32\\).join\\('\\\\n'\\)\\);console.log\\('---- samples ----'\\);console.log\\(lines.filter\\(l=>l&&!l.startsWith\\('#'\\)\\).slice\\(4000,4006\\).join\\('\\\\n'\\)\\);\" \"$sp\")",
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\"; New-Item -ItemType Directory -Force d:\\\\code\\\\zh-dic-anki\\\\vendor | Out-Null; Copy-Item \"$sp\\\\cedict.u8\" d:\\\\code\\\\zh-dic-anki\\\\vendor\\\\cedict_ts.u8 -Force; node d:\\\\code\\\\zh-dic-anki\\\\tools\\\\build-dict.mjs)",
+      "PowerShell($c=@\\(\"$env:LOCALAPPDATA\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"$env:ProgramFiles\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"$env:ProgramFiles\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\",\"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\"\\); foreach\\($p in $c\\){ if\\(Test-Path $p\\){ \"FOUND $p\" } })",
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; Test-Path \"$sp\\\\node_modules\\\\puppeteer-core\")",
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; cd $sp; node smoke.mjs shot 2>&1 | Select-Object -Last 80)",
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; cd $sp; node diag.mjs 2>&1 | Select-Object -First 40)"
+    ]
+  }
+}

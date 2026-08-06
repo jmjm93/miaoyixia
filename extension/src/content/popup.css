@@ -1,0 +1,301 @@
+/* Styles for the popup's shadow root. `all: initial` on the host stops inherited page
+   styles (font, colour, line-height, direction) from leaking in; everything the popup
+   needs is then declared explicitly below. */
+
+:host {
+  all: initial;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  display: block;
+}
+
+:host(:not([data-visible])) {
+  display: none;
+}
+
+.card {
+  --zh-font-size: 14px;
+
+  --zh-bg: #ffffff;
+  --zh-fg: #1a1a1a;
+  --zh-muted: #6b7280;
+  --zh-border: #e2e5ea;
+  --zh-hover: #f3f4f6;
+  --zh-accent: #2563eb;
+  --zh-tone-1: #c0392b;
+  --zh-tone-2: #b7791f;
+  --zh-tone-3: #2f7d32;
+  --zh-tone-4: #2b5fd9;
+  --zh-tone-5: #6b7280;
+  --zh-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+
+  box-sizing: border-box;
+  min-width: 240px;
+  max-width: 380px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC",
+    "Hiragino Sans GB", sans-serif;
+  font-size: var(--zh-font-size);
+  line-height: 1.45;
+  text-align: left;
+  color: var(--zh-fg);
+
+  background: var(--zh-bg);
+  border: 1px solid var(--zh-border);
+  border-radius: 10px;
+  box-shadow: var(--zh-shadow);
+}
+
+/* Dark palette: applied automatically, or forced from the options page. */
+@media (prefers-color-scheme: dark) {
+  .card[data-theme="auto"] {
+    --zh-bg: #1f2227;
+    --zh-fg: #e8eaed;
+    --zh-muted: #9aa0a6;
+    --zh-border: #34383f;
+    --zh-hover: #2a2e35;
+    --zh-accent: #7aa2f7;
+    --zh-tone-1: #f2777a;
+    --zh-tone-2: #e0b060;
+    --zh-tone-3: #8fc98f;
+    --zh-tone-4: #7aa2f7;
+    --zh-tone-5: #9aa0a6;
+    --zh-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.card[data-theme="dark"] {
+  --zh-bg: #1f2227;
+  --zh-fg: #e8eaed;
+  --zh-muted: #9aa0a6;
+  --zh-border: #34383f;
+  --zh-hover: #2a2e35;
+  --zh-accent: #7aa2f7;
+  --zh-tone-1: #f2777a;
+  --zh-tone-2: #e0b060;
+  --zh-tone-3: #8fc98f;
+  --zh-tone-4: #7aa2f7;
+  --zh-tone-5: #9aa0a6;
+  --zh-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ---- Candidate tabs: longest match first ---- */
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--zh-border);
+  position: sticky;
+  top: 0;
+  background: var(--zh-bg);
+}
+
+.tabs[hidden] {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0;
+  padding: 3px 8px;
+  font: inherit;
+  font-size: calc(var(--zh-font-size) * 1.05);
+  color: var(--zh-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  background: var(--zh-hover);
+  color: var(--zh-fg);
+}
+
+.tab.is-active {
+  color: var(--zh-fg);
+  background: var(--zh-hover);
+  border-color: var(--zh-accent);
+}
+
+/* The digit that selects this tab. Styled as a key cap so it doesn't read as a count. */
+.tab .key {
+  align-self: center;
+  min-width: 1.1em;
+  padding: 0 3px;
+  font-size: calc(var(--zh-font-size) * 0.68);
+  line-height: 1.4;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--zh-muted);
+  border: 1px solid var(--zh-border);
+  border-radius: 3px;
+}
+
+.tab.is-active .key {
+  color: var(--zh-accent);
+  border-color: var(--zh-accent);
+}
+
+/* ---- Entries ---- */
+
+.panel {
+  padding: 4px 0;
+}
+
+.entry {
+  padding: 8px 12px;
+}
+
+.entry + .entry {
+  border-top: 1px solid var(--zh-border);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.word {
+  font-size: calc(var(--zh-font-size) * 1.5);
+  font-weight: 600;
+}
+
+.variant {
+  font-size: calc(var(--zh-font-size) * 1.1);
+  color: var(--zh-muted);
+}
+
+.variant::before {
+  content: "·";
+  margin-right: 5px;
+}
+
+.pinyin {
+  font-size: calc(var(--zh-font-size) * 1.02);
+  letter-spacing: 0.01em;
+}
+
+.tone-1 { color: var(--zh-tone-1); }
+.tone-2 { color: var(--zh-tone-2); }
+.tone-3 { color: var(--zh-tone-3); }
+.tone-4 { color: var(--zh-tone-4); }
+.tone-5 { color: var(--zh-tone-5); }
+.tone-0 { color: var(--zh-muted); }
+
+/* ---- Pronunciation button ---- */
+
+.speak {
+  /* Pushed to the top-right of the entry, clear of the pinyin however long it runs. */
+  margin: 0 0 0 auto;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--zh-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.speak svg {
+  width: calc(var(--zh-font-size) * 1.1);
+  height: calc(var(--zh-font-size) * 1.1);
+  fill: currentColor;
+}
+
+/* The two arcs are strokes, not fills. */
+.speak .wave {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.speak:hover {
+  color: var(--zh-accent);
+  background: var(--zh-hover);
+}
+
+.speak:focus-visible {
+  outline: 2px solid var(--zh-accent);
+  outline-offset: 1px;
+}
+
+.speak[data-state="loading"] {
+  cursor: progress;
+}
+
+/* Fetching a recording takes a moment; pulse the outer arc so the click feels acknowledged. */
+.speak[data-state="loading"] .wave-2 {
+  animation: zh-pulse 0.9s ease-in-out infinite;
+}
+
+.speak[data-state="error"] {
+  color: var(--zh-tone-1);
+}
+
+/* Failure is per-word and expected sometimes, so drop the waves rather than shout. */
+.speak[data-state="error"] .wave {
+  display: none;
+}
+
+@keyframes zh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speak[data-state="loading"] .wave-2 {
+    animation: none;
+  }
+}
+
+.senses {
+  margin: 5px 0 0;
+  padding-left: 1.35em;
+  list-style: decimal;
+}
+
+.senses li {
+  margin: 1px 0;
+}
+
+.senses li::marker {
+  color: var(--zh-muted);
+  font-size: 0.85em;
+}
+
+.more {
+  margin: 2px 0 0 12px;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: calc(var(--zh-font-size) * 0.85);
+  color: var(--zh-accent);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.more:hover {
+  background: var(--zh-hover);
+}
+
+.hint {
+  padding: 6px 12px 8px;
+  font-size: calc(var(--zh-font-size) * 0.78);
+  color: var(--zh-muted);
+  border-top: 1px solid var(--zh-border);
+}

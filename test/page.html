@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>zh-dic test page</title>
+    <style>
+      body {
+        margin: 0 auto;
+        padding: 40px 24px 320px;
+        max-width: 640px;
+        font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+        line-height: 2;
+      }
+      h1 { font-size: 20px; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #666; margin-top: 32px; }
+      p { font-size: 28px; margin: 8px 0; }
+      .note { font-size: 13px; color: #666; line-height: 1.5; }
+      .styled { color: #b00; font-weight: 700; }
+      .dark { background: #16181d; color: #e8eaed; padding: 12px 16px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>zh-dic test page</h1>
+    <p class="note">Hover a character and hold <kbd>Shift</kbd>. Keep it held and move along the line to sweep.</p>
+
+    <h2>Plain text</h2>
+    <p id="plain">我喜欢吃中国菜。</p>
+
+    <h2>Word split across inline markup</h2>
+    <p class="note">中国菜 is broken up by a styled span — the popup should still offer the 3-character word.</p>
+    <p id="inline-split">我喜欢吃中<span class="styled">国</span>菜。</p>
+
+    <h2>Traditional characters</h2>
+    <p id="traditional">我喜歡喝茶，也喜歡中國菜。</p>
+
+    <h2>Ruby annotations</h2>
+    <p class="note">The pinyin in &lt;rt&gt; must be ignored, not treated as part of the word.</p>
+    <p id="ruby"><ruby>中国<rt>zhōngguó</rt></ruby>菜很好吃。</p>
+
+    <h2>Long word, and a nested block boundary</h2>
+    <p id="long">中华人民共和国成立于一九四九年。</p>
+    <p class="note">The word must not run across the block boundary below.</p>
+    <div id="blocks">中国<div>菜</div></div>
+
+    <h2>Dark background</h2>
+    <p id="dark" class="dark">今天天气很好。</p>
+
+    <h2>Near the viewport edge</h2>
+    <p id="edge" style="text-align: right">这个词在右边。</p>
+  </body>
+</html>

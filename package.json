@@ -1,0 +1,17 @@
+{
+  "name": "zh-dic-anki",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chromium extension: hover a Chinese word, press Shift, get a translation popup.",
+  "type": "module",
+  "scripts": {
+    "fetch-dict": "node tools/fetch-dict.mjs",
+    "build-dict": "node tools/build-dict.mjs",
+    "icons": "node tools/make-icons.mjs",
+    "build": "npm run fetch-dict && npm run build-dict && npm run icons",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}
