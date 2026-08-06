@@ -6,6 +6,7 @@ extension/data/
 
 # Test artefacts
 test/screenshots/
+icon-preview.png
 
 node_modules/
 *.zip

@@ -7,7 +7,6 @@ import {
   MENU,
   NAME,
   actionTitle,
-  badge,
   iconPaths,
   menuState,
   modifierLabel,
@@ -36,12 +35,24 @@ test('hover mode is the absence of a required modifier', () => {
 test('the icon greys out when switched off', () => {
   assert.match(iconPaths(true)[16], /icon-16\.png$/);
   assert.match(iconPaths(false)[16], /icon-off-16\.png$/);
-  assert.deepEqual(Object.keys(iconPaths(true)), ['16', '32', '48', '128']);
+  assert.match(iconPaths(false)[32], /icon-off-32\.png$/);
 });
 
-test('the badge appears only while off', () => {
-  assert.equal(badge(on({ enabled: true })).text, '');
-  assert.equal(badge(on({ enabled: false })).text, 'off');
+test('icon paths are anchored to the extension root', () => {
+  // Without the leading slash setIcon resolves against the caller -- the service worker at
+  // src/background/ -- and fetching src/background/icons/... fails, so the icon never changes.
+  for (const enabled of [true, false]) {
+    for (const path of Object.values(iconPaths(enabled))) {
+      assert.ok(path.startsWith('/'), `"${path}" must start with / or setIcon cannot fetch it`);
+    }
+  }
+});
+
+test('setIcon is offered only the sizes the toolbar draws at', () => {
+  // A size setIcon refuses fails the entire call, leaving the icon unchanged with no visible
+  // error. 48 and 128 belong to the manifest's `icons` block, not here.
+  assert.deepEqual(Object.keys(iconPaths(true)), ['16', '32']);
+  assert.deepEqual(Object.keys(iconPaths(false)), ['16', '32']);
 });
 
 test('the tooltip says both the state and what a click will do', () => {

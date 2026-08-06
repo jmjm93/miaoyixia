@@ -8,7 +8,8 @@
     "fetch-dict": "node tools/fetch-dict.mjs",
     "build-dict": "node tools/build-dict.mjs",
     "icons": "node tools/make-icons.mjs",
-    "build": "npm run fetch-dict && npm run build-dict && npm run icons",
+    "icons:preview": "node tools/make-icons.mjs --preview icon-preview.png",
+    "build": "npm run fetch-dict && npm run build-dict",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "devDependencies": {

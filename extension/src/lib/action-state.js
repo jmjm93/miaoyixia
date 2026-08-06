@@ -45,20 +45,26 @@ export function actionTitle(settings, isMac = false) {
   return `${NAME} — on, ${how}\nClick to turn off`;
 }
 
-/** Icon paths per size, for chrome.action.setIcon. */
+/**
+ * Icon paths for chrome.action.setIcon.
+ *
+ * The leading slash is load-bearing. setIcon resolves a relative path against the URL of
+ * whatever called it, and the caller is the service worker at src/background/ -- so
+ * "icons/icon-16.png" is fetched as "src/background/icons/icon-16.png" and fails with
+ * "Failed to fetch", leaving the icon silently unchanged. Manifest paths resolve from the
+ * extension root instead, so the identical-looking string works there, which makes this
+ * especially easy to get wrong. A leading slash anchors to the root from any caller.
+ *
+ * Only the toolbar sizes are offered: 16, and 32 for 2x displays. Chrome scales between them
+ * for other densities, and the 48/128 files exist for the manifest's `icons` block (extensions
+ * page, store listing) rather than for the button.
+ */
 export function iconPaths(enabled) {
   const suffix = enabled ? '' : '-off';
   return {
-    16: `icons/icon${suffix}-16.png`,
-    32: `icons/icon${suffix}-32.png`,
-    48: `icons/icon${suffix}-48.png`,
-    128: `icons/icon${suffix}-128.png`,
+    16: `/icons/icon${suffix}-16.png`,
+    32: `/icons/icon${suffix}-32.png`,
   };
-}
-
-/** A badge only while off: the grey icon says it too, but this is unmissable. */
-export function badge(settings) {
-  return settings.enabled ? { text: '', color: '#6b7280' } : { text: 'off', color: '#6b7280' };
 }
 
 /** Titles and checkbox states for the action's context menu. */
