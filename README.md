@@ -22,17 +22,6 @@ up any Chinese the pointer rests on.
 every word the pointer crosses on its way somewhere else. Set it to 0 for instant lookups.
 The row is hidden unless the keyless trigger is selected.
 
-In hover mode the popup also has to stay reachable. It opens ~12px from the word, and at
-ordinary line spacing the *next line's characters fall inside that gap* — so moving down to
-click a tab crosses another word. Words crossed in that narrow band are ignored rather than
-looked up, otherwise the popup re-anchors to them and slides out from under the pointer. The
-band stops exactly at the word's edge, so sweeping along a line is unaffected.
-
-The delay gates *showing* the popup, not looking the word up — the two overlap, so the wait
-is `max(delay, lookup)` rather than `delay + lookup`. Getting this wrong is why hover mode
-used to feel slower than the modifier despite doing identical work; there's a regression test
-for it in [test/interaction.test.mjs](test/interaction.test.mjs).
-
 **Show script** decides whether an entry leads with its simplified or traditional form. The
 other one follows after a middot, and only when the two actually differ.
 
