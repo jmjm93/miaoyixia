@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "zh-dic — Chinese hover dictionary",
+  "name": "miaoyixia — Chinese hover dictionary",
   "version": "0.1.0",
   "description": "Hover a Chinese word and press Shift for pinyin and definitions. Fully offline, powered by CC-CEDICT.",
   "permissions": ["storage"],
