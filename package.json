@@ -10,6 +10,7 @@
     "icons": "node tools/make-icons.mjs",
     "icons:preview": "node tools/make-icons.mjs --preview icon-preview.png",
     "build": "npm run fetch-dict && npm run build-dict",
+    "package": "node tools/package.mjs",
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "devDependencies": {

@@ -8,6 +8,9 @@ extension/data/
 test/screenshots/
 icon-preview.png
 
+# Store upload packages (rebuild with `npm run package`)
+dist/
+
 node_modules/
 *.zip
 *.crx

@@ -33,6 +33,10 @@
   const APPROACH_GRACE = 800;
   /** cos of the angle between pointer movement and the popup that counts as "heading for it". */
   const APPROACH_COS = 0.45;
+  /** How far past the popup's near edge the approach corridor reaches. */
+  const CORRIDOR_PAD = 4;
+  /** How far either side of the word/popup the corridor reaches. */
+  const CORRIDOR_SIDE_PAD = 16;
 
   let settings = null;
   let popup = null;
@@ -208,6 +212,38 @@
   }
 
   /**
+   * Is the pointer in the gap between the word on display and the popup?
+   *
+   * Hover mode re-anchors the moment a different word is under the pointer, which is what makes
+   * sweeping a line work. But the popup opens only ~12px from the word, and at ordinary line
+   * spacing the *next line's characters fall inside that gap* -- so reaching for the popup
+   * crossed another word, the popup re-anchored to it and slid out from under the pointer.
+   * Inside this band the pointer is on its way to the popup, not reading, so re-anchoring is
+   * suppressed.
+   *
+   * The band starts exactly at the word's edge with no padding on that side: extending it back
+   * over the word would cover the lower few pixels of the glyphs and stop sweeping from working
+   * there. It's measured from whichever side the popup ended up on, so a flipped popup works too.
+   */
+  function inApproachCorridor() {
+    const rect = popup.rect;
+    const word = current?.rect;
+    if (!rect || !word) return false;
+
+    const below = rect.top >= word.bottom;
+    const top = below ? word.bottom : rect.bottom - CORRIDOR_PAD;
+    const bottom = below ? rect.top + CORRIDOR_PAD : word.top;
+    if (bottom <= top) return false; // popup overlaps the word; no gap to cross
+
+    return (
+      pointer.y >= top &&
+      pointer.y <= bottom &&
+      pointer.x >= Math.min(word.left, rect.left) - CORRIDOR_SIDE_PAD &&
+      pointer.x <= Math.max(word.right, rect.right) + CORRIDOR_SIDE_PAD
+    );
+  }
+
+  /**
    * Is the pointer moving towards the popup? Measured against the nearest point on its box,
    * so this works whether it sits below the word, above it after a flip, or off to one side.
    */
@@ -304,6 +340,8 @@
 
     if (hit.key === lastKey) return; // already on display
     if (hit.key === pendingKey) return; // already being fetched
+    // A word crossed on the way to the popup isn't a word the user asked about.
+    if (popup.visible && inApproachCorridor()) return;
     beginLookup(hit);
   }
 

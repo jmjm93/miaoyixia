@@ -165,7 +165,17 @@ async function openPage(
   // content.js appends the popup host once it has its settings.
   await page.waitForSelector('[data-zh-dic-host]', { timeout: 10000 });
 
-  page.pointAt = async (selector, index) =>
+  page.pointAt = async (selector, index) => {
+    const point = await page.pointAtImmediate(selector, index);
+    // scrollIntoView above dispatches a scroll event on the next frame, and content.js
+    // (correctly) dismisses on scroll -- which would cancel the lookup the caller is about to
+    // trigger. Let it land first. Only targets far enough down the page to actually scroll are
+    // affected, which is why this went unnoticed until a fixture near the bottom was used.
+    await new Promise((r) => setTimeout(r, 100));
+    return point;
+  };
+
+  page.pointAtImmediate = async (selector, index) =>
     page.evaluate(
       ([sel, i]) => {
         const el = document.querySelector(sel);
@@ -221,6 +231,13 @@ async function openPage(
   };
 
   // The shadow root is open, so `>>>` reaches the popup's own elements.
+  /** The headword the popup is currently showing, read out of its shadow root. */
+  page.shownWord = () =>
+    page.evaluate(
+      () =>
+        document.querySelector('[data-zh-dic-host]')?.shadowRoot?.querySelector('.entry .word')?.textContent ?? null,
+    );
+
   page.speakers = () => page.$$('>>> button.speak');
   page.adders = () => page.$$('>>> button.anki-add');
   page.adderStates = async () =>
@@ -367,6 +384,30 @@ test('the popup survives a deliberate move towards it across the gap', async () 
   const rect = await page.popupRect();
   await page.glideTo(at, { x: rect.x + 40, y: rect.y + 12 });
   assert.equal(await page.popupVisible(), true, 'should stay open while being approached');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('reaching the popup does not re-anchor to the line below', async () => {
+  // The popup opens ~12px under the word, so in tightly-spaced text the next line sits inside
+  // that gap. Hover mode re-anchors instantly once visible, so crossing that line used to make
+  // the popup jump to it and then slide out from under the pointer.
+  const page = await openPage({ triggerKey: 'none', hoverDelay: 100 });
+  const at = await page.pointAt('#tight', 0);
+
+  await page.mouse.move(at.x, at.y);
+  await page.waitForSelector('[data-zh-dic-host][data-visible]', { timeout: 5000 });
+  const before = await page.shownWord();
+  assert.ok(before, 'no word shown to begin with');
+
+  const rect = await page.popupRect();
+  // Straight down into the popup. Kept vertical on purpose: drifting sideways would cross other
+  // words on the *same* line, and re-anchoring to those is correct sweeping behaviour.
+  await page.glideTo(at, { x: at.x, y: rect.y + 14 }, 8, 35);
+
+  assert.equal(await page.popupVisible(), true, 'popup closed on the way');
+  assert.equal(await page.shownWord(), before, 'popup re-anchored to a word crossed en route');
 
   page.assertNoErrors();
   await page.close();

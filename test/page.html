@@ -47,5 +47,14 @@
 
     <h2>Near the viewport edge</h2>
     <p id="edge" style="text-align: right">这个词在右边。</p>
+
+    <h2>Tightly-spaced block</h2>
+    <p class="note">
+      The popup opens ~12px below the word. With ordinary line spacing the next line's
+      characters fall inside that gap, so reaching for the popup crosses another word — and it
+      must not re-anchor to it. Deliberately unlike the rest of this page, which uses
+      line-height 2 and so hides the problem entirely.
+    </p>
+    <p id="tight" style="line-height: 1.2; width: 340px; font-size: 24px; margin: 0">中国菜很好吃我喜欢每天都吃中国菜今天天气很好我们去公园散步学习中文很有意思</p>
   </body>
 </html>
