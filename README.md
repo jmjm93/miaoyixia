@@ -1,60 +1,7 @@
 # 瞄一下
 
-A Chromium extension that shows pinyin and definitions for the Chinese word under your
-pointer — when you hold <kbd>Shift</kbd>, or on hover alone if you'd rather not press
-anything. Works fully offline; the dictionary is bundled, so nothing you read is sent
-anywhere.
-
-### Where the logs go
-
-- **Content script** — the page's own DevTools console.
-- **Service worker** — `brave://extensions` → the extension's **service worker** link.
-  Errors during a lookup are logged there, not in the page.
-- **The popup's internals** — expand `#shadow-root (open)` on the `[data-zh-dic-host]`
-  element in the page's DOM tree. The root is deliberately `open`; see
-  [popup.js](extension/src/content/popup.js) for why.
-
-## Tests
-
-```sh
-npm test
-```
-
-Two suites, both running the code the extension actually ships:
-
-- [test/lookup.test.mjs](test/lookup.test.mjs) — segmentation, tone marks, and card
-  building, with `chrome` and `fetch` stubbed to read the built shards from disk.
-- [test/dom.test.mjs](test/dom.test.mjs) — the parts that need real layout: resolving a
-  pointer to a character, and reading a word forward across inline markup. Drives a local
-  Chromium via puppeteer-core; set `ZH_DIC_BROWSER=<path>` if it can't find your browser.
-- [test/audio.test.mjs](test/audio.test.mjs) — the Commons recording matcher, against
-  recorded API responses so it needs no network and can't trip Wikimedia's rate limiting.
-- [test/options.test.mjs](test/options.test.mjs) — the options page against stubbed storage
-  and voice lists: which audio choices are offered, which is shown, and what is saved.
-- [test/interaction.test.mjs](test/interaction.test.mjs) — the trigger behaviour, with real
-  mouse and key events: both modes, dwell timing, the approach grace, and Escape. `content.js`
-  reaches the outside world only through `chrome.runtime.sendMessage`, so the stub routes
-  those back into Node where the real handler logic runs. The interaction model itself is not
-  faked, and a configurable fake latency stands in for a cold service worker.
-
-The DOM suite injects the content scripts into a page rather than loading the packaged
-extension, because current Chrome/Brave stable refuse the `--load-extension` command-line
-switch. `resolveAtPoint()` takes explicit viewport coordinates, so this tests the real
-hit-testing against real layout — nothing meaningful is stubbed.
-
-## Anki export
-
-Not built yet, but the lookup path is shaped for it.
-[card.js](extension/src/lib/card.js) already returns a superset of what a flashcard
-needs — both scripts, tone-marked *and* numbered pinyin, the senses, the sentence the word
-appeared in, and the source page — and the popup renders straight from that object. Adding
-an exporter means adding a consumer of data that already reaches the popup, not changing
-how lookups work.
-
-The likely shape: a button in the popup that POSTs the active card to
-[AnkiConnect](https://foosoft.net/projects/anki-connect/) on `localhost:8765`, which needs
-`http://localhost:8765/` in `host_permissions` and Anki running with the add-on installed.
-A file-based `.tsv` export needs no new permissions at all.
+An extension for Chromium-based browsers that opens a popup over the Chinese word you're hovering with its definition.
+It contains sound and Anki support.
 
 ## Settings
 

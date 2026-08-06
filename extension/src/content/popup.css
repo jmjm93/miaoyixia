@@ -262,6 +262,91 @@
   }
 }
 
+/* ---- Add to Anki ---- */
+
+.anki-add {
+  /* Only the first button in the row claims the auto margin, so they sit together. */
+  margin: 0 0 0 2px;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--zh-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* When the speaker is absent, this button takes over pushing itself right. */
+.speak + .anki-add {
+  margin-left: 2px;
+}
+
+.head > .anki-add:not(.speak + .anki-add) {
+  margin-left: auto;
+}
+
+.anki-add svg {
+  width: calc(var(--zh-font-size) * 1.1);
+  height: calc(var(--zh-font-size) * 1.1);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The plus and the tick occupy the same box; state decides which is drawn. */
+.anki-add .tick {
+  display: none;
+}
+
+.anki-add:hover:not(:disabled) {
+  color: var(--zh-accent);
+  background: var(--zh-hover);
+}
+
+.anki-add:focus-visible {
+  outline: 2px solid var(--zh-accent);
+  outline-offset: 1px;
+}
+
+.anki-add:disabled {
+  cursor: default;
+}
+
+.anki-add[data-state="adding"] {
+  cursor: progress;
+  animation: zh-pulse 0.9s ease-in-out infinite;
+}
+
+/* Already in the collection, or just added: show a tick, dimmed and inert. */
+.anki-add[data-state="added"],
+.anki-add[data-state="duplicate"] {
+  color: var(--zh-tone-3);
+  opacity: 0.75;
+}
+
+.anki-add[data-state="added"] .plus,
+.anki-add[data-state="duplicate"] .plus {
+  display: none;
+}
+
+.anki-add[data-state="added"] .tick,
+.anki-add[data-state="duplicate"] .tick {
+  display: inline;
+}
+
+/* Anki not running, or the note was refused. */
+.anki-add[data-state="unavailable"] {
+  opacity: 0.35;
+}
+
+.anki-add[data-state="error"] {
+  color: var(--zh-tone-1);
+}
+
 .senses {
   margin: 5px 0 0;
   padding-left: 1.35em;

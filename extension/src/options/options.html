@@ -92,6 +92,69 @@
         </p>
       </details>
 
+      <h2>Anki</h2>
+      <section>
+        <label class="row switch">
+          <input type="checkbox" id="ankiEnabled" />
+          <span>
+            Show an “add to Anki” button
+            <small>Needs Anki running with the AnkiConnect add-on</small>
+          </span>
+        </label>
+
+        <div class="row" id="ankiPermissionRow">
+          <span>
+            Local access
+            <small id="ankiPermissionState">Not granted</small>
+          </span>
+          <button type="button" id="ankiGrant">Grant</button>
+        </div>
+
+        <div class="row" id="ankiStatusRow">
+          <span>
+            Connection
+            <small id="ankiStatus">Not checked</small>
+          </span>
+          <button type="button" id="ankiRetry">Check</button>
+        </div>
+
+        <label class="row">
+          <span>
+            Deck
+            <small>Created automatically if it doesn’t exist yet</small>
+          </span>
+          <span class="control">
+            <input type="text" id="ankiDeck" list="ankiDeckList" spellcheck="false" />
+            <datalist id="ankiDeckList"></datalist>
+          </span>
+        </label>
+
+        <label class="row">
+          <span>
+            Note type
+            <small>Also created automatically, with tone colouring</small>
+          </span>
+          <span class="control">
+            <input type="text" id="ankiModel" list="ankiModelList" spellcheck="false" />
+            <datalist id="ankiModelList"></datalist>
+          </span>
+        </label>
+
+        <label class="row">
+          <span>Tags</span>
+          <span class="control">
+            <input type="text" id="ankiTags" spellcheck="false" />
+          </span>
+        </label>
+      </section>
+
+      <h3>Fields</h3>
+      <p class="meta" id="ankiFieldsNote">
+        Choose what goes in each field of your note type. Read from your collection, so any
+        naming works.
+      </p>
+      <table class="fields" id="ankiFieldsTable"><tbody></tbody></table>
+
       <h2>Appearance</h2>
       <section>
         <label class="row">

@@ -8,6 +8,10 @@
     "https://commons.wikimedia.org/*",
     "https://upload.wikimedia.org/*"
   ],
+  "optional_host_permissions": [
+    "http://127.0.0.1:8765/*",
+    "http://localhost:8765/*"
+  ],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"

@@ -170,8 +170,41 @@
 
     #renderPanel(candidate) {
       this.#panel.replaceChildren();
-      for (const card of candidate.cards) {
-        this.#panel.append(this.#renderCard(card));
+      candidate.cards.forEach((card, index) => {
+        this.#panel.append(this.#renderCard(card, index));
+      });
+      // Whether these words are already in Anki is answered asynchronously; the buttons start
+      // enabled and are disabled if the answer says so.
+      this.onInspect?.(candidate);
+    }
+
+    /**
+     * Apply Anki availability to the add buttons of the candidate currently on screen.
+     * @param {{ready: boolean, states: Array<{canAdd: boolean, duplicate: boolean, error: string}>}} result
+     */
+    applyAnkiStates(result) {
+      for (const button of this.#panel.querySelectorAll('button.anki-add')) {
+        const state = result.states?.[Number(button.dataset.entry)];
+        if (!state) continue;
+
+        if (state.duplicate) {
+          button.dataset.state = 'duplicate';
+          button.disabled = true;
+          button.title = 'Already in your Anki collection';
+        } else if (!state.canAdd) {
+          button.dataset.state = 'error';
+          button.disabled = true;
+          button.title = `Anki won't accept this note: ${state.error}`;
+        }
+      }
+    }
+
+    /** Mark every add button unavailable, e.g. because Anki isn't running. */
+    disableAnki(reason) {
+      for (const button of this.#panel.querySelectorAll('button.anki-add')) {
+        button.dataset.state = 'unavailable';
+        button.disabled = true;
+        button.title = reason;
       }
     }
 
@@ -218,7 +251,54 @@
       return button;
     }
 
-    #renderCard(card) {
+    /**
+     * The "add to Anki" button for one reading, beside its speaker.
+     *
+     * Starts enabled and is disabled by applyAnkiStates once Anki has been asked whether the
+     * word is already there. Doing it that way round keeps the popup instant -- the duplicate
+     * check is a round trip, and blocking the render on it would undo the latency work.
+     */
+    #renderAddButton(card, index) {
+      if (!this.#settings.ankiEnabled || !this.onAdd) return null;
+
+      const button = document.createElement('button');
+      button.className = 'anki-add';
+      button.type = 'button';
+      button.dataset.state = 'idle';
+      button.dataset.entry = String(index);
+      button.setAttribute('aria-label', `Add ${card.headword} to Anki`);
+      button.title = `Add ${card.headword} to Anki`;
+      button.innerHTML =
+        '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">' +
+        '<path class="plus" d="M8 3.4v9.2M3.4 8h9.2"/>' +
+        '<path class="tick" d="M3.6 8.6l3 3 5.8-6.4"/>' +
+        '</svg>';
+
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (button.disabled || button.dataset.state === 'adding') return;
+
+        button.dataset.state = 'adding';
+        try {
+          const result = await this.onAdd(card);
+          button.dataset.state = 'added';
+          button.disabled = true;
+          button.title = result?.created?.length
+            ? `Added to ${result.deck} (created ${result.created.join(' and ')})`
+            : `Added to ${result?.deck ?? 'Anki'}`;
+        } catch (error) {
+          const reason = String(error?.message ?? error);
+          button.dataset.state = /duplicate/i.test(reason) ? 'duplicate' : 'error';
+          button.disabled = /duplicate/i.test(reason);
+          button.title = /duplicate/i.test(reason) ? 'Already in your Anki collection' : `Could not add: ${reason}`;
+        }
+      });
+
+      return button;
+    }
+
+    #renderCard(card, index = 0) {
       const wrap = document.createElement('article');
       wrap.className = 'entry';
 
@@ -255,6 +335,9 @@
 
       const speaker = this.#renderSpeaker(card);
       if (speaker) head.append(speaker);
+
+      const add = this.#renderAddButton(card, index);
+      if (add) head.append(add);
 
       const senses = document.createElement('ol');
       senses.className = 'senses';

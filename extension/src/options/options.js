@@ -3,6 +3,9 @@
 // need to reload open tabs.
 
 import { DEFAULT_SETTINGS, HOVER_ONLY, getSettings } from '../lib/settings.js';
+import { TOKENS } from '../lib/anki-fields.js';
+
+const ANKI_ORIGINS = ['http://127.0.0.1:8765/*', 'http://localhost:8765/*'];
 
 /** Controls whose value is a number rather than a string. */
 const NUMERIC = new Set(['fontSize', 'maxSenses', 'hoverDelay', 'speechRate']);
@@ -144,6 +147,151 @@ for (const key of Object.keys(DEFAULT_SETTINGS)) {
 
 syncConditionalRows();
 reportVoices();
+
+// --- Anki ---------------------------------------------------------------------
+//
+// Deck, note type and every field name are read from the collection rather than assumed. The
+// shipped defaults only pre-fill the inputs, so a different collection needs no code change.
+
+const ankiEl = {
+  enabled: document.getElementById('ankiEnabled'),
+  deck: document.getElementById('ankiDeck'),
+  model: document.getElementById('ankiModel'),
+  deckList: document.getElementById('ankiDeckList'),
+  modelList: document.getElementById('ankiModelList'),
+  status: document.getElementById('ankiStatus'),
+  permissionState: document.getElementById('ankiPermissionState'),
+  permissionRow: document.getElementById('ankiPermissionRow'),
+  statusRow: document.getElementById('ankiStatusRow'),
+  grant: document.getElementById('ankiGrant'),
+  retry: document.getElementById('ankiRetry'),
+  table: document.getElementById('ankiFieldsTable'),
+  note: document.getElementById('ankiFieldsNote'),
+};
+
+/** Field names of the note type currently typed in, or null while unknown. */
+let modelFields = null;
+
+function fillOptions(datalist, values) {
+  datalist.replaceChildren();
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.value = value;
+    datalist.append(option);
+  }
+}
+
+/**
+ * One row per field of the selected note type, each bound to a token.
+ * Falls back to the configured mapping's own keys when the collection can't be read, so the
+ * mapping stays editable while Anki is closed.
+ */
+function renderFieldRows(fields) {
+  const body = ankiEl.table.querySelector('tbody');
+  body.replaceChildren();
+
+  for (const field of fields) {
+    const row = document.createElement('tr');
+
+    const label = document.createElement('th');
+    label.textContent = field;
+    label.scope = 'row';
+
+    const cell = document.createElement('td');
+    const select = document.createElement('select');
+    for (const token of TOKENS) {
+      const option = document.createElement('option');
+      option.value = token.id;
+      option.textContent = token.label;
+      select.append(option);
+    }
+    select.value = settings.ankiFields[field] ?? 'none';
+    select.addEventListener('change', () => {
+      settings.ankiFields = { ...settings.ankiFields, [field]: select.value };
+      chrome.storage.sync.set({ ankiFields: settings.ankiFields }).then(flashSaved);
+    });
+
+    cell.append(select);
+    row.append(label, cell);
+    body.append(row);
+  }
+
+  ankiEl.note.hidden = fields.length > 0 === false;
+}
+
+async function hasAnkiPermission() {
+  return chrome.permissions.contains({ origins: ANKI_ORIGINS });
+}
+
+/** Ask Anki for the collection's shape, and populate the dropdowns from it. */
+async function refreshAnki() {
+  const granted = await hasAnkiPermission();
+  ankiEl.permissionState.textContent = granted ? 'Granted' : 'Not granted';
+  ankiEl.grant.hidden = granted;
+
+  if (!granted) {
+    ankiEl.status.textContent = 'Grant local access first';
+    renderFieldRows(Object.keys(settings.ankiFields));
+    return;
+  }
+
+  ankiEl.status.textContent = 'Checking…';
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'ankiCollection' });
+    if (!response?.ok) throw new Error(response?.error ?? 'no response');
+    const { version, decks, models } = response.result;
+
+    ankiEl.status.textContent = `Connected — AnkiConnect v${version}, ${decks.length} decks`;
+    fillOptions(ankiEl.deckList, decks);
+    fillOptions(ankiEl.modelList, models);
+
+    // Only the chosen note type's real fields are worth offering.
+    if (models.includes(settings.ankiModel)) {
+      const fieldResponse = await chrome.runtime.sendMessage({ type: 'ankiFields', model: settings.ankiModel });
+      modelFields = fieldResponse?.ok ? fieldResponse.result.fields : null;
+      renderFieldRows(modelFields ?? Object.keys(settings.ankiFields));
+    } else {
+      // A note type that doesn't exist yet will be created from this very mapping.
+      renderFieldRows(Object.keys(settings.ankiFields));
+      ankiEl.status.textContent += ` · “${settings.ankiModel}” will be created on first use`;
+    }
+  } catch (error) {
+    ankiEl.status.textContent = `Not reachable — is Anki running? (${String(error.message ?? error)})`;
+    renderFieldRows(Object.keys(settings.ankiFields));
+  }
+}
+
+ankiEl.grant.addEventListener('click', async () => {
+  // Must be called from a user gesture, which is why this lives on a button.
+  const granted = await chrome.permissions.request({ origins: ANKI_ORIGINS });
+  if (granted) refreshAnki();
+});
+
+ankiEl.retry.addEventListener('click', refreshAnki);
+
+// Re-reading the field list is only worth it once the typed name settles.
+ankiEl.model.addEventListener('change', refreshAnki);
+
+function syncAnkiRows() {
+  const on = ankiEl.enabled.checked;
+  for (const el of ankiEl.table.closest('main').querySelectorAll('#ankiFieldsTable, #ankiFieldsNote')) {
+    el.hidden = !on;
+  }
+  ankiEl.permissionRow.hidden = !on;
+  ankiEl.statusRow.hidden = !on;
+  for (const id of ['ankiDeck', 'ankiModel', 'ankiTags']) {
+    document.getElementById(id).closest('.row').hidden = !on;
+  }
+  document.querySelector('h3').hidden = !on;
+}
+
+ankiEl.enabled.addEventListener('change', () => {
+  syncAnkiRows();
+  if (ankiEl.enabled.checked) refreshAnki();
+});
+
+syncAnkiRows();
+if (ankiEl.enabled.checked) refreshAnki();
 
 // Report what the bundled dictionary actually contains, so a stale or missing build is obvious.
 try {

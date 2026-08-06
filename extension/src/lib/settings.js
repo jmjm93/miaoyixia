@@ -34,6 +34,25 @@ export const DEFAULT_SETTINGS = {
   /** Playback speed. Recordings are only ever slowed, never sped up. */
   speechRate: 0.9,
 
+  /**
+   * Anki export. Every name here is a *default*, not an assumption: the deck, the note type
+   * and each field name are read from the user's collection at runtime and remapped in the
+   * options page. Whatever is configured gets created on first use if it doesn't exist.
+   */
+  ankiEnabled: false,
+  ankiDeck: 'Mandarin::Chinese Mining',
+  ankiModel: 'Chinese (Basic)',
+  /** field name -> token id, see anki-fields.js TOKENS */
+  ankiFields: {
+    Hanzi: 'headword',
+    Color: 'colourHanzi',
+    Pinyin: 'colourPinyin',
+    English: 'senses',
+    Sound: 'audio',
+  },
+  /** Space-separated, applied to every note the extension adds. */
+  ankiTags: 'miao-yixia',
+
   /** 'auto' follows the OS colour scheme. */
   theme: 'auto',
   fontSize: 14,

@@ -146,6 +146,85 @@ kbd {
   border-radius: 4px;
 }
 
+h3 {
+  margin: 20px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+h3[hidden] {
+  display: none;
+}
+
+input[type="text"] {
+  min-width: 15rem;
+  padding: 4px 6px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+button {
+  padding: 4px 12px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button[hidden] {
+  display: none;
+}
+
+/* Field mapping: one row per field of the user's note type. */
+.fields {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fields[hidden] {
+  display: none;
+}
+
+.fields th {
+  width: 40%;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 400;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fields td {
+  padding: 6px 12px;
+  text-align: right;
+}
+
+.fields tr + tr th,
+.fields tr + tr td {
+  border-top: 1px solid var(--border);
+}
+
+.fields select {
+  width: 100%;
+  max-width: 16rem;
+}
+
 details {
   margin: 8px 0 0;
   font-size: 13px;

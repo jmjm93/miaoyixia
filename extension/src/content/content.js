@@ -75,6 +75,8 @@
     popup = new zh.Popup(settings);
     popup.onSelect = (candidate) => paintHighlight(candidate?.length ?? 0);
     popup.onPlay = playPronunciation;
+    popup.onAdd = addToAnki;
+    popup.onInspect = inspectAnki;
     addListeners();
   }
 
@@ -399,6 +401,32 @@
 
     // 'recording' means recordings only, so it does not fall back to the voice here.
     throw new Error(source === 'recording' ? 'no-recording' : 'no-audio');
+  }
+
+  // --- Anki --------------------------------------------------------------------
+
+  /**
+   * Ask Anki which of this candidate's readings are already in the collection, and grey those
+   * buttons out. Fire-and-forget: the popup has already rendered, so a slow or absent Anki
+   * costs nothing but a button that stays enabled until the answer lands.
+   */
+  async function inspectAnki(candidate) {
+    if (!settings.ankiEnabled) return;
+
+    const shownFor = lastKey;
+    try {
+      const result = await send({ type: 'ankiInspect', cards: candidate.cards });
+      // A newer lookup may have replaced the panel these buttons belong to.
+      if (lastKey === shownFor) popup.applyAnkiStates(result);
+    } catch (error) {
+      if (lastKey === shownFor) popup.disableAnki('Anki is not running, or AnkiConnect is unavailable');
+      console.debug('[zh-dic] anki inspect failed', error);
+    }
+  }
+
+  /** Add one reading as a note. Errors propagate so the button can explain itself. */
+  function addToAnki(card) {
+    return send({ type: 'ankiAdd', card });
   }
 
   /** Underline the characters the selected tab actually covers. */

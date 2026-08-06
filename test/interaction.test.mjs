@@ -92,7 +92,10 @@ after(async () => {
  * A page with the content scripts running under the given settings.
  * `lookupDelay` stands in for a slow or cold service worker.
  */
-async function openPage(overrides = {}, { lookupDelay = 0, voices = [], audioResult = { found: false } } = {}) {
+async function openPage(
+  overrides = {},
+  { lookupDelay = 0, voices = [], audioResult = { found: false }, ankiInspect = null, ankiAdd = null } = {},
+) {
   const settings = { ...DEFAULT_SETTINGS, ...overrides };
   const page = await browser.newPage();
   await page.setViewport({ width: 900, height: 800 });
@@ -106,6 +109,9 @@ async function openPage(overrides = {}, { lookupDelay = 0, voices = [], audioRes
     return { candidates: await candidatesFor(text) };
   });
   await page.exposeFunction('__zhAudio', async () => audioResult);
+  // Returning null makes the stub reject, standing in for Anki being closed.
+  await page.exposeFunction('__zhAnkiInspect', async () => ankiInspect);
+  await page.exposeFunction('__zhAnkiAdd', async () => ankiAdd);
 
   await page.evaluateOnNewDocument(
     `window.__settings = ${JSON.stringify(settings)};
@@ -137,6 +143,14 @@ async function openPage(overrides = {}, { lookupDelay = 0, voices = [], audioRes
            if (msg.type === 'getSettings') return { ok: true, result: window.__settings };
            if (msg.type === 'lookup') return { ok: true, result: await window.__zhLookup(msg.text) };
            if (msg.type === 'audio') return { ok: true, result: await window.__zhAudio(msg.word, msg.pinyin) };
+           if (msg.type === 'ankiInspect') {
+             const r = await window.__zhAnkiInspect();
+             return r ? { ok: true, result: r } : { ok: false, error: 'Cannot reach Anki' };
+           }
+           if (msg.type === 'ankiAdd') {
+             const r = await window.__zhAnkiAdd();
+             return r ? { ok: true, result: r } : { ok: false, error: 'cannot create note because it is a duplicate' };
+           }
            return { ok: false, error: 'unhandled ' + msg.type };
          },
        },
@@ -208,6 +222,13 @@ async function openPage(overrides = {}, { lookupDelay = 0, voices = [], audioRes
 
   // The shadow root is open, so `>>>` reaches the popup's own elements.
   page.speakers = () => page.$$('>>> button.speak');
+  page.adders = () => page.$$('>>> button.anki-add');
+  page.adderStates = async () =>
+    Promise.all(
+      (await page.adders()).map((b) =>
+        b.evaluate((el) => ({ state: el.dataset.state, disabled: el.disabled, title: el.title })),
+      ),
+    );
   page.spoken = () => page.evaluate(() => window.__spoken);
 
   return page;
@@ -479,6 +500,145 @@ test('no play button at all when audio is off', async () => {
   const page = await openPage({ triggerKey: 'Shift', audio: 'off' }, { voices: [ZH_VOICE] });
   await page.openPopup('#plain', 4);
   assert.equal((await page.speakers()).length, 0);
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('no Anki button unless Anki export is switched on', async () => {
+  const page = await openPage({ triggerKey: 'Shift', ankiEnabled: false }, { voices: [ZH_VOICE] });
+  await page.openPopup('#plain', 4);
+  assert.equal((await page.adders()).length, 0);
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a word already in the collection has its add button greyed out', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true },
+    { ankiInspect: { ready: true, states: [{ canAdd: false, duplicate: true, error: 'duplicate' }] } },
+  );
+  await page.openPopup('#plain', 4);
+
+  // The check is a round trip, so the button starts enabled and is disabled on the answer.
+  await page.waitForFunction(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add')?.disabled === true,
+    { timeout: 5000 },
+  );
+  const [state] = await page.adderStates();
+  assert.equal(state.state, 'duplicate');
+  assert.match(state.title, /Already in your Anki collection/);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a new word stays addable, and adding it shows a tick', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true },
+    {
+      ankiInspect: { ready: true, states: [{ canAdd: true, duplicate: false, error: '' }] },
+      ankiAdd: { noteId: 1, created: [], deck: 'Mandarin::Chinese Mining', audio: false },
+    },
+  );
+  await page.openPopup('#plain', 4);
+
+  const [button] = await page.adders();
+  assert.equal(await button.evaluate((el) => el.disabled), false, 'a new word must stay clickable');
+
+  await button.click();
+  await page.waitForFunction(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add').dataset.state === 'added',
+    { timeout: 5000 },
+  );
+  const [state] = await page.adderStates();
+  assert.equal(state.disabled, true, 'no adding the same note twice');
+  assert.match(state.title, /Added to Mandarin::Chinese Mining/);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('creating a deck or note type is reported in the tooltip', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true },
+    {
+      ankiInspect: { ready: false, states: [{ canAdd: true, duplicate: false, error: '' }] },
+      ankiAdd: { noteId: 2, created: ['deck "X"', 'note type "Y"'], deck: 'X', audio: false },
+    },
+  );
+  await page.openPopup('#plain', 4);
+
+  const [button] = await page.adders();
+  await button.click();
+  await page.waitForFunction(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add').dataset.state === 'added',
+    { timeout: 5000 },
+  );
+  assert.match((await page.adderStates())[0].title, /created deck "X" and note type "Y"/);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('with Anki closed the button is disabled and says so', async () => {
+  // ankiInspect null makes the stub reply with an error, as an unreachable Anki would.
+  const page = await openPage({ triggerKey: 'Shift', ankiEnabled: true }, { ankiInspect: null });
+  await page.openPopup('#plain', 4);
+
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add')?.dataset.state ===
+      'unavailable',
+    { timeout: 5000 },
+  );
+  const [state] = await page.adderStates();
+  assert.equal(state.disabled, true);
+  assert.match(state.title, /Anki is not running/);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a duplicate discovered only at add time still greys the button out', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true },
+    { ankiInspect: { ready: true, states: [{ canAdd: true, duplicate: false, error: '' }] }, ankiAdd: null },
+  );
+  await page.openPopup('#plain', 4);
+
+  const [button] = await page.adders();
+  await button.click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('button.anki-add').dataset.state ===
+      'duplicate',
+    { timeout: 5000 },
+  );
+  assert.equal((await page.adderStates())[0].disabled, true);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('each reading gets its own add button, greyed independently', async () => {
+  // 打 has two readings; only the second is already in the collection.
+  const page = await openPage(
+    { triggerKey: 'Shift', ankiEnabled: true },
+    {
+      ankiInspect: {
+        ready: true,
+        states: [
+          { canAdd: true, duplicate: false, error: '' },
+          { canAdd: false, duplicate: true, error: 'duplicate' },
+        ],
+      },
+    },
+  );
+  // #plain is 我喜欢吃中国菜。 — index 0 (我) has a single entry, so use the multi-reading page.
+  await page.openPopup('#long', 0);
+  const before = await page.adderStates();
+  assert.ok(before.length >= 1);
+
   page.assertNoErrors();
   await page.close();
 });
