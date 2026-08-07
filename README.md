@@ -22,6 +22,18 @@ button tooltips, and the toolbar menu. **English** and **Español** are availabl
 browser because a Spanish speaker on an English-language browser is a normal case, not an edge
 one. See [Languages](#languages) for what this does *not* change.
 
+**Definitions** sets the language of the definitions themselves, separately from **Language**
+above. **English** ships in the extension. **Español** is not: it is ~10 MB, so it is downloaded
+once, on request, from
+[cedict-translations](https://github.com/jmjm93/cedict-translations) — then stored locally and
+used offline like the English. The row below the control reports what's stored and can remove
+it again.
+
+The two are deliberately independent: a Spanish speaker may well prefer a Spanish interface
+over CC-CEDICT's English definitions, which are the richer, human-edited original. Entries the
+Spanish layer doesn't cover fall back to English one sense at a time, so a gap never means a
+missing definition. See [Languages](#languages).
+
 **Trigger** is the main one. Either a held modifier — <kbd>Shift</kbd>, <kbd>Ctrl</kbd>,
 <kbd>Alt</kbd> or <kbd>Win</kbd>/<kbd>Cmd</kbd> — or **No key, show on hover**, which looks
 up any Chinese the pointer rests on.
@@ -43,7 +55,7 @@ separately.
 | | |
 | --- | --- |
 | *Voice, then recording* | Default. An installed Chinese voice, falling back to Wikimedia Commons. |
-| *Computer voice only* | Offline and instant, and covers all 124,766 entries. |
+| *Computer voice only* | Offline and instant, and covers every entry. |
 | *Wikimedia recordings only* | Real speakers, but only common words have one. |
 | *No audio button* | Hides it entirely. |
 
@@ -96,10 +108,32 @@ undone by the next mouse twitch.
 
 ## Languages
 
-The interface speaks English and Spanish. **The definitions do not** — CC-CEDICT is a Chinese–English
-dictionary, so glosses, and therefore anything derived from them (Anki's definition fields, the
-`+n more` senses), stay in English whatever this is set to. A Spanish gloss layer is a separate
-piece of work.
+The interface and the definitions are set separately — **Language** and **Definitions** in the
+options. Interface strings live in this repository; definitions come from the dictionary.
+
+CC-CEDICT is Chinese–English, so English is what ships in the extension. Spanish definitions
+come from [cedict-translations](https://github.com/jmjm93/cedict-translations), which machine-
+translates CC-CEDICT's glosses with each entry's headword and pinyin as context (so 打 `[da2]`
+is *docena* and 打 `[da3]` is *golpear*, rather than a coin toss). That layer is **not bundled**:
+at ~10 MB it would double the download for everyone to serve the few who want it, and it
+wouldn't scale past one extra language. It is fetched once, on request, and stored in
+IndexedDB.
+
+Consequences worth knowing:
+
+- **Enabling Spanish needs a connection once.** Everything after that is local, including
+  Anki's definition fields and the `+n more` senses.
+- **The whole file is fetched at once, deliberately.** Shard indices derive from a word's head
+  character, so fetching shards on demand would tell the host roughly which characters are being
+  read. One upfront download leaks only that somebody enabled Spanish.
+- **Coverage is 99.76%.** Entries the layer doesn't cover fall back to English one sense at a
+  time, which also covers entries CC-CEDICT gains between gloss releases.
+- **The version is pinned** ([`gloss-store.js`](extension/src/lib/gloss-store.js)). A stored
+  layer built against an older CC-CEDICT is treated as absent rather than used, since entries
+  shift between releases.
+
+Adding another gloss language means publishing it in that repository and adding an entry to
+`GLOSS_SOURCES`.
 
 Strings live in one place, [`extension/src/lib/messages.js`](extension/src/lib/messages.js), as a
 `{ language: { key: string } }` catalogue. Adding a language means adding a key to `LANGUAGES`, a

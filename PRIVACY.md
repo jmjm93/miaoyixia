@@ -27,7 +27,7 @@ not remotely.
 
 ## What leaves your device
 
-Two things, and both only when you explicitly click something:
+Three things, and all of them only when you explicitly click something:
 
 **1. Pronunciation recordings.** If you click the speaker button on an entry and no Chinese
 voice is installed on your computer, the extension asks
@@ -41,7 +41,22 @@ If you have a Chinese voice installed, your computer speaks the word and **no ne
 made at all**. Setting *Audio source* to "Computer voice only" or "No audio button" disables the
 Wikimedia request entirely.
 
-**2. Anki flashcards.** If you turn on Anki export and click the **+** on an entry, the word,
+**2. The Spanish definitions.** If you set *Definitions* to Español and click **Download**, the
+extension fetches one file from
+[github.com](https://github.com/jmjm93/cedict-translations) — the Spanish dictionary itself,
+about 10 MB. It is a plain download of a public file. **Nothing about you, and nothing you have
+looked up, is sent**; the request says only that somebody is downloading that file, exactly as
+if you had clicked the link in a browser. GitHub sees it the ordinary way any website sees a
+visit.
+
+The whole dictionary is downloaded in one go, on purpose. Fetching pieces of it as you read
+would let the server infer which words you were looking at; one upfront download cannot. Once
+it is stored, **no further requests are ever made** — Spanish lookups are as offline as English
+ones. Access to that address is an *optional* permission, requested at the moment you click
+Download; if you never do, it is never granted. Removing the download deletes it from your
+machine.
+
+**3. Anki flashcards.** If you turn on Anki export and click the **+** on an entry, the word,
 pinyin, definitions, the sentence you found it in and the page address are sent to
 `http://127.0.0.1:8765` — the [AnkiConnect](https://foosoft.net/projects/anki-connect/) add-on
 running in your own copy of Anki, on your own machine. This traffic never leaves your computer.

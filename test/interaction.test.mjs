@@ -102,7 +102,15 @@ after(async () => {
  */
 async function openPage(
   overrides = {},
-  { lookupDelay = 0, voices = [], audioResult = { found: false }, ankiInspect = null, ankiAdd = null } = {},
+  {
+    lookupDelay = 0,
+    voices = [],
+    audioResult = { found: false },
+    ankiInspect = null,
+    ankiAdd = null,
+    glossPending = false,
+    translate = null,
+  } = {},
 ) {
   const settings = { ...DEFAULT_SETTINGS, ...overrides };
   const page = await browser.newPage();
@@ -114,7 +122,7 @@ async function openPage(
   // Same shape the service worker replies with: { ok, result }.
   await page.exposeFunction('__zhLookup', async (text) => {
     if (lookupDelay) await new Promise((r) => setTimeout(r, lookupDelay));
-    return { candidates: await candidatesFor(text) };
+    return { candidates: await candidatesFor(text, {}, translate), glossPending };
   });
   await page.exposeFunction('__zhAudio', async () => audioResult);
   // Returning null makes the stub reject, standing in for Anki being closed.
@@ -761,5 +769,99 @@ test('in hover mode the Spanish hint names no key at all', async () => {
   assert.equal(hint, 'Pasar el ratón para buscar · ←/→ cambiar · Esc para cerrar');
 
   page.assertNoErrors();
+  await page.close();
+});
+
+// --- the definitions-in-English warning ----------------------------------------
+//
+// Picking Spanish and being shown English is a deliberate fallback, not a failure, so the
+// popup marks it with a badge rather than an error. There are two ways to end up there and
+// only one is actionable, which is why they carry different explanations: a missing download
+// can be fixed from the options page, an entry the translation simply doesn't cover cannot.
+
+const READ_WARNING = `(() => {
+  const el = document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('.warn');
+  return { hidden: el.hidden, text: el.textContent, title: el.title, aria: el.getAttribute('aria-label') };
+})()`;
+
+test('no warning when the definitions are the ones that were asked for', async () => {
+  // Everything translated: nothing to explain.
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'es' }, {
+    translate: (senses) => senses.map((s) => `ES:${s}`),
+  });
+  await page.openPopup('#plain', 4);
+
+  assert.equal((await page.evaluate(READ_WARNING)).hidden, true);
+  await page.close();
+});
+
+test('a missing download is flagged and says what to do about it', async () => {
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'es' }, { glossPending: true });
+  await page.openPopup('#plain', 4);
+
+  const warn = await page.evaluate(READ_WARNING);
+  assert.equal(warn.hidden, false);
+  assert.equal(warn.text, '!');
+  assert.match(warn.title, /have not been downloaded yet/);
+  assert.match(warn.title, /extension options/, 'the actionable case names the way out');
+  assert.equal(warn.aria, warn.title, 'the visible text is a bare "!", so the label carries it');
+  await page.close();
+});
+
+test('an entry the translation does not cover is flagged differently', async () => {
+  // The layer is present -- so no "download it" advice -- but this entry has no Spanish.
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'es' }, { translate: () => null });
+  await page.openPopup('#plain', 4);
+
+  const warn = await page.evaluate(READ_WARNING);
+  assert.equal(warn.hidden, false);
+  assert.match(warn.title, /no Spanish definition yet/);
+  assert.doesNotMatch(warn.title, /extension options/, 'nothing to download; do not send them looking');
+  await page.close();
+});
+
+test('the warning is translated like the rest of the popup', async () => {
+  const page = await openPage(
+    { triggerKey: 'Shift', glossLanguage: 'es', uiLanguage: 'es' },
+    { glossPending: true },
+  );
+  await page.openPopup('#plain', 4);
+
+  assert.match((await page.evaluate(READ_WARNING)).title, /aún no se han descargado/);
+  await page.close();
+});
+
+test('the hint text is left alone by the warning', async () => {
+  // The badge is a sibling of the hint, not part of it: the hint is one readable sentence and
+  // a stray "!" spliced into it would help nobody.
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'es' }, { glossPending: true });
+  await page.openPopup('#plain', 4);
+
+  const hint = await page.evaluate(
+    () => document.querySelector('[data-zh-dic-host]').shadowRoot.querySelector('.hint').textContent,
+  );
+  assert.equal(hint, 'Shift-hover to look up · ←/→ switch · Esc to close');
+  await page.close();
+});
+
+test('English definitions never raise the warning', async () => {
+  // The regression this guards: every English card is "untranslated" in the sense the badge
+  // tests for, because there is no gloss layer behind it. Read naively that made the badge
+  // appear on every single lookup, claiming an entry had no Spanish -- while the user was
+  // reading the English they actually asked for.
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'en' }, { translate: () => null });
+  await page.openPopup('#plain', 4);
+
+  assert.equal((await page.evaluate(READ_WARNING)).hidden, true);
+  await page.close();
+});
+
+test('English definitions stay clean even if the worker reports a pending layer', async () => {
+  // Belt and braces: a stale glossPending arriving after a switch back to English must not
+  // resurrect the badge either.
+  const page = await openPage({ triggerKey: 'Shift', glossLanguage: 'en' }, { glossPending: true });
+  await page.openPopup('#plain', 4);
+
+  assert.equal((await page.evaluate(READ_WARNING)).hidden, true);
   await page.close();
 });

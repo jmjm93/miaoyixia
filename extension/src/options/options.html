@@ -35,6 +35,24 @@
         </label>
 
         <label class="row">
+          <span>
+            <span data-i18n="glossLanguage">Definitions</span>
+            <small data-i18n="glossLanguageHint">Language of the definitions themselves. Spanish is downloaded once, then works offline</small>
+          </span>
+          <select id="glossLanguage">
+            <option value="en">English</option>
+            <option value="es">Español</option>
+          </select>
+        </label>
+
+        <!-- Always present, whichever language is selected: what a language costs and whether
+             it is already here should be visible *before* you switch to it, not after. -->
+        <details id="glossLanguages" open>
+          <summary data-i18n="glossAvailable">Definition languages</summary>
+          <ul id="glossList"></ul>
+        </details>
+
+        <label class="row">
           <span data-i18n="trigger">Trigger</span>
           <select id="triggerKey">
             <option value="Shift" data-i18n="holdShift">Hold Shift</option>

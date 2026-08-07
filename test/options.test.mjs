@@ -14,6 +14,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join } from 'node:path';
+import { CATALOGUE } from '../extension/src/lib/i18n.js';
+import { GLOSS_SOURCES } from '../extension/src/lib/gloss-store.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -204,23 +206,28 @@ test('the page renders in Spanish when that is the stored language', async () =>
 
   const text = await page.evaluate(READ_LABELS);
 
+  // Asserted against the catalogue rather than against literal copy. What is under test is
+  // that the Spanish branch was taken -- and since every key below differs between en and es,
+  // rendering English still fails. Pinning the exact wording instead would mean every tweak
+  // to a translation breaks a test that has nothing to do with the wording.
   assert.equal(text.lang, 'es', '<html lang> should follow the chosen language');
-  assert.equal(text.title, 'Ajustes de 瞄一下');
-  assert.equal(text.tagline, 'Diccionario emergente de chino.');
-  assert.equal(text.enabled, 'Activado');
-  assert.equal(text.language, 'Idioma');
-  assert.equal(text.pronunciation, 'Pronunciación');
-  assert.match(text.noKey, /Sin tecla/);
+  assert.equal(text.title, CATALOGUE.es.optionsTitle);
+  assert.equal(text.tagline, CATALOGUE.es.tagline);
+  assert.equal(text.enabled, CATALOGUE.es.enabled);
+  assert.equal(text.language, CATALOGUE.es.uiLanguage);
+  assert.equal(text.pronunciation, CATALOGUE.es.pronunciation);
+  assert.equal(text.noKey, CATALOGUE.es.noKey);
 
   // Strings assembled in JS rather than replaced in the markup.
   // Shows the recording hint, not the "auto" one: with no voice installed the select is
   // displayed as the option that will actually be used. Either way it comes from AUDIO_HINTS.
-  assert.match(text.audioHint, /Personas reales, desde Wikimedia Commons/);
+  assert.equal(text.audioHint, CATALOGUE.es.audioHintRecording);
   assert.match(text.voiceStatus, /No hay ninguna voz en chino/, 'live voice status');
-  assert.equal(text.firstToken, '— dejar vacío —', 'the Anki field tokens are built in JS');
+  assert.equal(text.firstToken, CATALOGUE.es.tokenNone, 'the Anki field tokens are built in JS');
 
-  // Substituted, and with the number formatted for Spanish rather than for English.
-  assert.match(text.voiceHelpNote, /124\.766 entradas/);
+  // The count itself comes from CC-CEDICT and changes with every upstream release, so assert
+  // the *formatting* instead: Spanish groups thousands with a period, English with a comma.
+  assert.match(text.voiceHelpNote, /\d{1,3}(\.\d{3})+ entradas/, 'Spanish thousands separator');
 
   assert.deepEqual(failures, [], 'unexpected page errors');
   await page.close();
@@ -241,14 +248,191 @@ test('changing the language repaints the page without a reload', async () => {
   await page.waitForFunction(() => document.documentElement.lang === 'en');
 
   const text = await page.evaluate(READ_LABELS);
-  assert.equal(text.enabled, 'Enabled');
-  assert.equal(text.pronunciation, 'Pronunciation');
-  assert.equal(text.firstToken, '— leave empty —', 'the field rows must be rebuilt, not left stale');
+  assert.equal(text.enabled, CATALOGUE.en.enabled);
+  assert.equal(text.pronunciation, CATALOGUE.en.pronunciation);
+  assert.equal(text.firstToken, CATALOGUE.en.tokenNone, 'the field rows must be rebuilt, not left stale');
   // These carry a placeholder in the markup, so the repaint must put the real answer back
   // rather than leaving "Checking for Chinese voices…" behind.
   assert.match(text.voiceStatus, /No Chinese voice is installed/);
-  assert.match(text.voiceHelpNote, /124,766 entries/);
+  assert.match(text.voiceHelpNote, /\d{1,3}(,\d{3})+ entries/, 'English thousands separator');
 
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+// --- definition languages ----------------------------------------------------
+//
+// The list is always on screen, so it has to be right before anything is downloaded: the
+// bundled language offers no action, a downloadable one says what it would cost you, and the
+// row marked active is where definitions are *actually* coming from — which is not the same as
+// the picker's value while a download is pending.
+
+const READ_GLOSS_LIST = `Array.from(document.querySelectorAll('#glossList li')).map((li) => ({
+  lang: li.dataset.lang,
+  state: li.dataset.state,
+  active: li.hasAttribute('data-active'),
+  name: li.querySelector('.name').textContent,
+  status: li.querySelector('.state').textContent,
+  button: li.querySelector('button')?.textContent ?? null,
+}))`;
+
+test('every definition language is listed, downloaded or not', async () => {
+  const { page, failures } = await openOptions({ audio: 'auto', voices: [] });
+  const rows = await page.evaluate(READ_GLOSS_LIST);
+
+  assert.deepEqual(
+    rows.map((r) => r.lang),
+    ['en', 'es'],
+    'the bundled language and every downloadable one',
+  );
+
+  const [en, es] = rows;
+  assert.equal(en.state, 'bundled');
+  assert.equal(en.status, CATALOGUE.en.glossBundled);
+  assert.equal(en.button, null, 'nothing to download or remove for the bundled language');
+  assert.equal(en.active, true, 'English is the default');
+
+  // The stub refuses the permission, so the row should say why rather than claim it is merely
+  // absent — that is the difference between "click to get it" and "you must allow this first".
+  assert.equal(es.state, 'missing');
+  assert.equal(es.status, CATALOGUE.en.glossNeedsPermission);
+  assert.equal(es.button, CATALOGUE.en.glossDownload);
+  assert.equal(es.active, false);
+
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+test('the active row follows the stored language, not the download state', async () => {
+  // Spanish selected but never downloaded: the picker says Spanish, lookups still answer in
+  // English, and the list must not imply the data is present.
+  const { page, failures } = await openOptions({
+    audio: 'auto',
+    voices: [],
+    store: { glossLanguage: 'es' },
+  });
+
+  const rows = await page.evaluate(READ_GLOSS_LIST);
+  assert.equal(await page.evaluate(() => document.getElementById('glossLanguage').value), 'es');
+  assert.equal(rows.find((r) => r.lang === 'es').active, true);
+  assert.equal(rows.find((r) => r.lang === 'en').active, false);
+  assert.equal(rows.find((r) => r.lang === 'es').state, 'missing', 'selected is not downloaded');
+
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+test('the language list is translated with the rest of the page', async () => {
+  const { page, failures } = await openOptions({
+    audio: 'auto',
+    voices: [],
+    store: { uiLanguage: 'es' },
+  });
+
+  const rows = await page.evaluate(READ_GLOSS_LIST);
+  assert.equal(rows[0].status, CATALOGUE.es.glossBundled);
+  assert.equal(rows[1].button, CATALOGUE.es.glossDownload);
+  // Language names stay in their own language, as everywhere else that lists them.
+  assert.equal(rows[1].name, 'Español');
+
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+/**
+ * Put a downloaded layer in IndexedDB, as gloss-store would after a real download.
+ *
+ * Only the meta record matters here — the list reads that, not the shards. Written through a
+ * page on the same origin so it lands in the store the options page will open.
+ */
+async function seedGloss(page, lang, record) {
+  await page.evaluate(
+    async (lang, record) => {
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open('zh-gloss', 1);
+        request.onupgradeneeded = () => {
+          const created = request.result;
+          if (!created.objectStoreNames.contains('shards')) created.createObjectStore('shards');
+          if (!created.objectStoreNames.contains('meta')) created.createObjectStore('meta');
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('meta', 'readwrite');
+        tx.objectStore('meta').put(record, lang);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    },
+    lang,
+    record,
+  );
+}
+
+/** Leaving a seeded layer behind would make every other test see it as downloaded. */
+async function wipeGloss(page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const request = indexedDB.deleteDatabase('zh-gloss');
+        request.onsuccess = request.onerror = request.onblocked = () => resolve();
+      }),
+  );
+}
+
+test('a downloaded layer reports its size, and cannot be removed while in use', async () => {
+  const { page, failures } = await openOptions({
+    audio: 'auto',
+    voices: [],
+    store: { glossLanguage: 'es' },
+  });
+  await seedGloss(page, 'es', {
+    entries: 124349,
+    version: GLOSS_SOURCES.es.version,
+    downloadedAt: '2026-08-08T10:00:00.000Z',
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => document.body.dataset.ready !== undefined);
+
+  const es = (await page.evaluate(READ_GLOSS_LIST)).find((r) => r.lang === 'es');
+  assert.equal(es.state, 'ready');
+  assert.match(es.status, /124,349/, 'reports what is actually stored');
+  assert.equal(es.button, CATALOGUE.en.glossRemove);
+
+  // Removing the layer the definitions come from would drop every lookup back to English while
+  // the picker still said Spanish — a state indistinguishable from a bug.
+  const remove = await page.evaluate(
+    () => {
+      const button = document.querySelector("#glossList li[data-lang='es'] button");
+      return { disabled: button.disabled, title: button.title };
+    },
+  );
+  assert.equal(remove.disabled, true);
+  assert.equal(remove.title, CATALOGUE.en.glossRemoveActive, 'says how to unblock it');
+
+  await wipeGloss(page);
+  assert.deepEqual(failures, [], 'unexpected page errors');
+  await page.close();
+});
+
+test('a downloaded layer that is not in use can be removed', async () => {
+  const { page, failures } = await openOptions({ audio: 'auto', voices: [] }); // English selected
+  await seedGloss(page, 'es', {
+    entries: 124349,
+    version: GLOSS_SOURCES.es.version,
+    downloadedAt: '2026-08-08T10:00:00.000Z',
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => document.body.dataset.ready !== undefined);
+
+  const disabled = await page.evaluate(
+    () => document.querySelector("#glossList li[data-lang='es'] button").disabled,
+  );
+  assert.equal(disabled, false, 'nothing depends on it, so it is free to go');
+
+  await wipeGloss(page);
   assert.deepEqual(failures, [], 'unexpected page errors');
   await page.close();
 });

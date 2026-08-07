@@ -1,8 +1,8 @@
 {
-  "name": "zh-dic-anki",
+  "name": "cedict-translations",
   "version": "0.1.0",
   "private": true,
-  "description": "Chromium extension: hover a Chinese word, press Shift, get a translation popup.",
+  "description": "Chinese-X dictionaries in CC-CEDICT format, derived from CC-CEDICT.",
   "type": "module",
   "scripts": {
     "fetch-dict": "node tools/fetch-dict.mjs",

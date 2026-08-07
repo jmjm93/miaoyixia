@@ -24,6 +24,18 @@ export const DEFAULT_SETTINGS = {
    * English-language browser is precisely who this exists for.
    */
   uiLanguage: 'auto',
+  /**
+   * Language of the *definitions*, which is a separate choice from `uiLanguage` on purpose.
+   *
+   * A Spanish speaker may well want a Spanish interface over English glosses: CC-CEDICT's
+   * English is the richer, human-edited original, and plenty of learners study Chinese
+   * through English. Tying the two together would take that away for no reason.
+   *
+   * 'en' is always available because it ships in the package. Anything else is downloaded on
+   * first use -- see gloss-store.js -- so this setting can name a language whose data is not
+   * present yet, and the lookup path falls back to English until it is.
+   */
+  glossLanguage: 'en',
   /** One of TRIGGER_KEYS. */
   triggerKey: 'Shift',
   /**

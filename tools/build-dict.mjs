@@ -1,21 +1,14 @@
 // Compiles vendor/cedict_ts.u8 into the sharded lookup tables the extension ships.
 //
-// Sharding strategy: every candidate word generated for a single hover starts with
-// the same character (we only ever extend forward from the cursor), so bucketing by
-// the head character means one hover touches exactly one shard. Each shard is a few
-// dozen KB, which keeps the MV3 service worker's cold-start cost negligible -- it
-// never has to parse the whole 4 MB dictionary just to translate one word.
+// The bucketing rule itself lives in extension/src/lib/shard.js, shared with the runtime so
+// the two cannot drift. See there for why the dictionary is sharded at all.
 
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { SHARD_COUNT, shardFor } from '../extension/src/lib/shard.js';
 
-export const SHARD_COUNT = 128;
-
-/** Which shard holds words beginning with `char`. Mirrored by dict-store.js at runtime. */
-export function shardFor(char) {
-  return char.codePointAt(0) % SHARD_COUNT;
-}
+export { SHARD_COUNT, shardFor };
 
 // TRADITIONAL SIMPLIFIED [pin1 yin1] /sense one/sense two/
 const LINE = /^(\S+)\s+(\S+)\s+\[([^\]]*)\]\s+\/(.*)\/\s*$/;

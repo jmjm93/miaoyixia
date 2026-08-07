@@ -4,6 +4,7 @@
   --muted: #6b7280;
   --border: #e2e5ea;
   --accent: #2563eb;
+  --danger: #c4443a;
   color-scheme: light dark;
 }
 
@@ -14,6 +15,7 @@
     --muted: #9aa0a6;
     --border: #34383f;
     --accent: #7aa2f7;
+    --danger: #f08a80;
   }
 }
 
@@ -177,9 +179,14 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 button[hidden] {
@@ -252,6 +259,61 @@ details li {
 details b {
   color: var(--fg);
   font-weight: 600;
+}
+
+/* Sits among the .row items rather than inside one, so it has to match their inset and carry
+   its own separators -- `.row + .row` can't reach across it. */
+#glossLanguages {
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+
+#glossLanguages + .row {
+  border-top: 1px solid var(--border);
+}
+
+/* The definition-language list: one row per language, name over state, action on the right. */
+#glossList {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+#glossList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 0;
+}
+
+#glossList li + li {
+  border-top: 1px solid var(--border);
+}
+
+#glossList .name {
+  color: var(--fg);
+}
+
+/* Marks the language the definitions are actually coming from right now. */
+#glossList li[data-active] .name {
+  font-weight: 600;
+}
+
+#glossList .state {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#glossList li[data-state='failed'] .state {
+  color: var(--danger);
+}
+
+#glossList button {
+  flex: none;
 }
 
 .meta,

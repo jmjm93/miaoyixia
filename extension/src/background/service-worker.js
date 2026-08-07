@@ -6,6 +6,7 @@
 
 import { loadMeta, lookupCandidates } from '../lib/dict-store.js';
 import { buildCard } from '../lib/card.js';
+import { clearGlosses, glossFor, glossInfo, glossReady, resetGlossReady } from '../lib/gloss-store.js';
 import { getSettings } from '../lib/settings.js';
 import { fileUrl, searchRecordings } from '../lib/audio-source.js';
 import { createClient, ensureTarget, reconcileMapping } from '../lib/anki.js';
@@ -26,16 +27,58 @@ const MAX_CACHED_AUDIO = 24;
  * candidate length, longest first.
  */
 async function handleLookup({ text, sentence, url, title }) {
-  const matches = await lookupCandidates(text ?? '');
+  const [settings, matches] = await Promise.all([getSettings(), lookupCandidates(text ?? '')]);
   const context = { sentence, url, title };
 
-  return {
-    candidates: matches.map(({ headword, length, entries }) => ({
+  // English ships in the package, so it is never pending and never needs a lookup. Any other
+  // language is downloaded, and until it is on disk the lookup quietly answers in English --
+  // the popup says so, but a missing download must never mean a missing definition.
+  const lang = settings.glossLanguage;
+  const translating = lang !== 'en' && (await glossReady(lang));
+
+  // Every candidate for one hover starts with the same character, so all of these resolve
+  // against a single memoised shard. The awaits are cheap after the first.
+  const candidates = await Promise.all(
+    matches.map(async ({ headword, length, entries }) => ({
       headword,
       length,
-      cards: entries.map((row) => buildCard(headword, row, context)),
+      cards: await Promise.all(
+        entries.map(async (row) =>
+          buildCard(headword, row, context, translating ? await glossFor(lang, headword, row) : null),
+        ),
+      ),
     })),
+  );
+
+  return { candidates, glossPending: lang !== 'en' && !translating };
+}
+
+/** What the options page shows for the gloss layer: chosen, stored, and whether they agree. */
+async function handleGlossStatus() {
+  const { glossLanguage } = await getSettings();
+  return {
+    language: glossLanguage,
+    ready: glossLanguage === 'en' || (await glossReady(glossLanguage)),
+    info: glossLanguage === 'en' ? null : await glossInfo(glossLanguage),
   };
+}
+
+/**
+ * Told by the options page that the stored layer changed.
+ *
+ * The download itself runs there, not here: it needs a user gesture for the permission prompt,
+ * and an MV3 worker can be killed mid-transfer. Extension pages and this worker share an
+ * origin, so what the options page writes to IndexedDB is what this worker reads -- it only
+ * needs to be told to stop trusting its memo.
+ */
+function handleGlossChanged() {
+  resetGlossReady();
+  return {};
+}
+
+async function handleGlossClear({ language }) {
+  await clearGlosses(language);
+  return {};
 }
 
 /** Uint8Array -> base64, in chunks so a long file can't blow the argument limit. */
@@ -178,6 +221,9 @@ const HANDLERS = {
   ankiFields: handleAnkiFields,
   ankiInspect: handleAnkiInspect,
   ankiAdd: handleAnkiAdd,
+  glossStatus: handleGlossStatus,
+  glossChanged: handleGlossChanged,
+  glossClear: handleGlossClear,
   getSettings,
   getMeta: loadMeta,
 };
@@ -186,13 +232,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handler = HANDLERS[message?.type];
   if (!handler) return false;
 
-  handler(message).then(
-    (result) => sendResponse({ ok: true, result }),
-    (error) => {
-      console.error(`[zh-dic] ${message.type} failed`, error);
-      sendResponse({ ok: false, error: String(error?.message ?? error) });
-    },
-  );
+  // Promise.resolve rather than handler(...).then: a handler that does no I/O is allowed to be
+  // an ordinary function, and one that throws synchronously must still answer. Without this,
+  // either case kills the message port and surfaces at the caller as a bare
+  // "handler(...).then is not a function" with no clue which message caused it.
+  Promise.resolve()
+    .then(() => handler(message))
+    .then(
+      (result) => sendResponse({ ok: true, result }),
+      (error) => {
+        console.error(`[zh-dic] ${message.type} failed`, error);
+        sendResponse({ ok: false, error: String(error?.message ?? error) });
+      },
+    );
   return true; // response is async
 });
 

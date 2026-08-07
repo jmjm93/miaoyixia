@@ -29,10 +29,19 @@ function renderSense(sense) {
  * @param {string} headword the form the user actually hovered
  * @param {string[]} row packed shard entry: [simplified, traditional|'', pinyin, senses]
  * @param {{sentence?: string, url?: string, title?: string}} [context]
+ * @param {string[]|null} [translated] senses in the chosen gloss language, index-aligned with
+ *   the English ones. Null when no translation is available for this entry -- which is normal,
+ *   not an error: the gloss layer trails CC-CEDICT by a few hundred entries and gains none
+ *   between releases. Falls back per sense rather than per entry, so a partly-translated entry
+ *   still shows what it has.
  */
-export function buildCard(headword, row, context = {}) {
+export function buildCard(headword, row, context = {}, translated = null) {
   const [simplified, traditional, numbered, senses] = row;
   const pinyin = toDiacritics(numbered);
+  // Bracketed pinyin cross-references survive translation, so the same rendering applies
+  // whichever language a sense is in.
+  const english = senses.split('/');
+  const shown = translated ? english.map((sense, i) => translated[i] || sense) : english;
 
   return {
     headword,
@@ -43,7 +52,9 @@ export function buildCard(headword, row, context = {}) {
     pinyin: pinyin.text,
     pinyinNumbered: numbered,
     syllables: pinyin.syllables,
-    senses: senses.split('/').map(renderSense),
+    senses: shown.map(renderSense),
+    /** Whether these senses came from the gloss layer rather than CC-CEDICT's English. */
+    translated: Boolean(translated),
     sentence: context.sentence ?? '',
     sourceUrl: context.url ?? '',
     sourceTitle: context.title ?? '',

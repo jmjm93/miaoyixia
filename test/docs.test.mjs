@@ -25,6 +25,7 @@ const INTERNAL = new Set(['lastModifier']);
 const DOCUMENTED_AS = {
   enabled: 'Enabled',
   uiLanguage: 'Language',
+  glossLanguage: 'Definitions',
   triggerKey: 'Trigger',
   hoverDelay: 'Hover delay',
   script: 'Show script',

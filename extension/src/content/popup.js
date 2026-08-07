@@ -32,6 +32,9 @@
     #tabs;
     #panel;
     #hint;
+    #warn;
+    /** Set when a gloss language is chosen but its data hasn't been downloaded yet. */
+    #glossPending = false;
     #candidates = [];
     #active = 0;
     #settings;
@@ -60,7 +63,19 @@
       this.#hint = document.createElement('div');
       this.#hint.className = 'hint';
 
-      this.#card.append(this.#tabs, this.#panel, this.#hint);
+      // Sibling of the hint rather than part of it: the hint's text is asserted verbatim in
+      // tests and read aloud as one string, and a stray "!" in the middle of it helps nobody.
+      this.#warn = document.createElement('span');
+      this.#warn.className = 'warn';
+      this.#warn.textContent = '!';
+      this.#warn.setAttribute('role', 'img');
+      this.#warn.hidden = true;
+
+      const foot = document.createElement('div');
+      foot.className = 'foot';
+      foot.append(this.#hint, this.#warn);
+
+      this.#card.append(this.#tabs, this.#panel, foot);
       this.#root.append(style, this.#card);
 
       this.#tabs.addEventListener('click', (event) => {
@@ -102,6 +117,36 @@
       this.#hint.textContent = t('popupHint', how);
     }
 
+    /**
+     * Explain, quietly, why these definitions are in English when another language was chosen.
+     *
+     * Two different situations look identical to a reader and are worth telling apart, because
+     * only one of them is actionable: the whole gloss layer is missing and can be downloaded,
+     * or it is present but has nothing for this particular entry. The second is normal -- the
+     * translation trails CC-CEDICT by a few hundred entries -- and there is nothing to do
+     * about it, so saying "download it" there would send someone looking for a button that
+     * would not help.
+     */
+    #applyWarning() {
+      // English is what CC-CEDICT ships, so a card being "untranslated" is the normal state
+      // rather than a shortfall -- there is nothing to fall back *from*. Without this the badge
+      // appears for every lookup the moment definitions are set to English.
+      if ((this.#settings?.glossLanguage ?? 'en') === 'en') {
+        this.#warn.hidden = true;
+        return;
+      }
+
+      const untranslated = this.#candidates[this.#active]?.cards.some((card) => !card.translated);
+      const reason = this.#glossPending ? 'glossPending' : untranslated ? 'glossMissingEntry' : '';
+
+      this.#warn.hidden = !reason;
+      if (!reason) return;
+      // title drives the native tooltip; aria-label is what a screen reader gets, since the
+      // visible text is a bare "!".
+      this.#warn.title = t(reason);
+      this.#warn.setAttribute('aria-label', t(reason));
+    }
+
     contains(node) {
       return this.#host.contains(node) || node === this.#host;
     }
@@ -112,8 +157,13 @@
       this.#applyHint();
     }
 
-    /** @param {Array<{headword: string, length: number, cards: object[]}>} candidates */
-    show(candidates, anchorRect) {
+    /**
+     * @param {Array<{headword: string, length: number, cards: object[]}>} candidates
+     * @param {DOMRect} anchorRect
+     * @param {{glossPending?: boolean}} [state]
+     */
+    show(candidates, anchorRect, state = {}) {
+      this.#glossPending = Boolean(state.glossPending);
       this.#candidates = candidates;
       this.#active = 0; // longest match wins by default
       this.#applyTheme();
@@ -166,6 +216,7 @@
       }
 
       this.#renderPanel(this.#candidates[this.#active]);
+      this.#applyWarning();
       this.onSelect?.(this.#candidates[this.#active]);
     }
 

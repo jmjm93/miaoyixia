@@ -8,7 +8,15 @@
 
 import { DEFAULT_SETTINGS, HOVER_ONLY, getSettings } from '../lib/settings.js';
 import { TOKENS, tokenLabel } from '../lib/anki-fields.js';
-import { language, t, tn } from '../lib/i18n.js';
+import {
+  GLOSS_ORIGIN,
+  GLOSS_SOURCES,
+  downloadGlosses,
+  glossInfo,
+  hasGlossPermission,
+  requestGlossPermission,
+} from '../lib/gloss-store.js';
+import { LANGUAGES, language, t, tn } from '../lib/i18n.js';
 
 const ANKI_ORIGINS = ['http://127.0.0.1:8765/*', 'http://localhost:8765/*'];
 
@@ -89,6 +97,7 @@ function applyTranslations() {
 function renderLiveText() {
   renderVoiceStatus();
   renderDictMeta();
+  refreshGloss();
   // refreshAnki redraws the field rows itself; without it nothing else would.
   if (ankiEl.enabled.checked) refreshAnki();
   else renderFieldRows(modelFields ?? Object.keys(settings.ankiFields));
@@ -239,6 +248,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (input && input !== document.activeElement) writeControl(input, newValue);
   }
 
+  if (changes.glossLanguage) refreshGloss();
+
   // getSettings() is what pins the language, so re-read before repainting the text.
   if (changes.uiLanguage) {
     getSettings().then(() => {
@@ -369,6 +380,187 @@ async function refreshAnki() {
   }
 }
 
+// --- the downloadable gloss layer -------------------------------------------
+//
+// Definitions for any language other than English are fetched once and kept in IndexedDB. The
+// list below the picker is always on screen, because whether a language is already here should
+// be answerable *before* switching to it, not discovered afterwards.
+//
+// The download runs on this page rather than in the service worker for two reasons: the
+// permission prompt needs a user gesture, and an MV3 worker can be killed mid-transfer.
+// Extension pages share the worker's origin, so what is written here is what the worker reads.
+
+const glossEl = {
+  select: document.getElementById('glossLanguage'),
+  list: document.getElementById('glossList'),
+};
+
+/** Every language definitions can be in. English is bundled; the rest are downloadable. */
+const GLOSS_LANGUAGES = ['en', ...Object.keys(GLOSS_SOURCES)];
+
+/** Approximate size of a gloss file, used only to turn bytes into a percentage. */
+const GLOSS_BYTES = 10.3e6;
+
+/**
+ * Per-language state that storage can't answer: an in-flight download's progress, or why the
+ * last attempt failed. Absent means "nothing happening, ask IndexedDB".
+ * @type {Map<string, {progress?: number|null, error?: string}>}
+ */
+const glossActivity = new Map();
+
+function glossName(lang) {
+  return GLOSS_SOURCES[lang]?.name ?? LANGUAGES[lang] ?? lang;
+}
+
+function progressText(activity) {
+  return activity.progress === null ? t('glossPreparing') : t('glossDownloading', activity.progress);
+}
+
+/** What one row should say, given everything known about that language right now. */
+function glossRowState(lang, info, granted) {
+  if (lang === 'en') return { key: 'bundled', text: t('glossBundled') };
+
+  const activity = glossActivity.get(lang);
+  if (activity?.progress !== undefined) return { key: 'downloading', text: progressText(activity) };
+  if (activity?.error) {
+    return { key: 'failed', text: t('glossFailed', activity.error), action: 'download' };
+  }
+
+  if (info?.version === GLOSS_SOURCES[lang]?.version) {
+    const when = new Date(info.downloadedAt).toLocaleDateString(language());
+    return {
+      key: 'ready',
+      text: t('glossDownloaded', info.entries.toLocaleString(language()), when),
+      action: 'remove',
+    };
+  }
+  // A layer built against an older CC-CEDICT is treated as absent rather than used, so the row
+  // has to say so instead of reporting everything is fine.
+  if (info) return { key: 'stale', text: t('glossUpdate'), action: 'download' };
+  return {
+    key: 'missing',
+    text: granted ? t('glossNotDownloaded') : t('glossNeedsPermission'),
+    action: 'download',
+  };
+}
+
+async function refreshGloss() {
+  const granted = await hasGlossPermission();
+  const infos = await Promise.all(GLOSS_LANGUAGES.map((lang) => (lang === 'en' ? null : glossInfo(lang))));
+
+  glossEl.list.replaceChildren();
+  for (const [i, lang] of GLOSS_LANGUAGES.entries()) {
+    const state = glossRowState(lang, infos[i], granted);
+
+    const li = document.createElement('li');
+    li.dataset.state = state.key;
+    li.dataset.lang = lang;
+    // Marks where the definitions are actually coming from, which is not always the row the
+    // user last clicked: picking a language it hasn't finished downloading still reads English.
+    if (lang === settings.glossLanguage) li.dataset.active = '';
+
+    const label = document.createElement('span');
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = glossName(lang);
+    const status = document.createElement('small');
+    status.className = 'state';
+    status.textContent = state.text;
+    label.append(name, status);
+    li.append(label);
+
+    if (state.action) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = t(state.action === 'remove' ? 'glossRemove' : 'glossDownload');
+
+      // Removing the layer the definitions are currently coming from would silently drop every
+      // lookup back to English, with the picker still insisting on Spanish -- a state that
+      // looks like a bug rather than a choice. Disabled rather than hidden, with the way out
+      // in the tooltip, so the button explains itself instead of vanishing.
+      const removingActive = state.action === 'remove' && lang === settings.glossLanguage;
+      if (removingActive) {
+        button.disabled = true;
+        button.title = t('glossRemoveActive');
+      }
+
+      button.addEventListener('click', () =>
+        state.action === 'remove' ? removeGloss(lang) : startGlossDownload(lang),
+      );
+      li.append(button);
+    }
+    glossEl.list.append(li);
+  }
+}
+
+async function removeGloss(lang) {
+  await chrome.runtime.sendMessage({ type: 'glossClear', language: lang });
+  glossActivity.delete(lang);
+  await refreshGloss();
+}
+
+/** Whether this language's stored layer matches the version this build expects. */
+async function glossDownloaded(lang) {
+  const info = await glossInfo(lang);
+  return info?.version === GLOSS_SOURCES[lang]?.version;
+}
+
+/**
+ * Fetch a language's definitions, reporting progress into its row.
+ *
+ * Returns immediately if that language is already downloading, which matters because two paths
+ * lead here: the row's own button, and switching the picker to a language that isn't here yet.
+ */
+async function startGlossDownload(lang) {
+  if (glossActivity.get(lang)?.progress !== undefined) return;
+
+  // Requested here because a permission prompt needs a user gesture, and both callers are one:
+  // a click on the button, or a change on the picker.
+  if (!(await hasGlossPermission()) && !(await requestGlossPermission())) {
+    glossActivity.set(lang, { error: t('glossNeedsPermission') });
+    await refreshGloss();
+    return;
+  }
+
+  glossActivity.set(lang, { progress: 0 });
+  await refreshGloss();
+
+  try {
+    await downloadGlosses(lang, (bytes) => {
+      const activity = { progress: bytes === null ? null : Math.min(99, Math.round((bytes / GLOSS_BYTES) * 100)) };
+      glossActivity.set(lang, activity);
+      // Rebuilding the whole list on every chunk would thrash the DOM and drop focus; the one
+      // row that changed is enough.
+      const status = glossEl.list.querySelector(`li[data-lang="${lang}"] .state`);
+      if (status) status.textContent = progressText(activity);
+    });
+    glossActivity.delete(lang);
+    // The worker memoises whether a layer is ready; tell it to look again.
+    await chrome.runtime.sendMessage({ type: 'glossChanged' });
+  } catch (error) {
+    glossActivity.set(lang, { error: String(error?.message ?? error) });
+  }
+  await refreshGloss();
+}
+
+/**
+ * Switching the picker to a language that isn't here yet starts fetching it.
+ *
+ * The setting is written either way, by the generic control handler above. Until the data
+ * lands, lookups answer in English and the popup says so -- a slow or failed download degrades
+ * to the previous behaviour rather than to a broken one.
+ */
+glossEl.select.addEventListener('change', async () => {
+  const lang = glossEl.select.value;
+  await refreshGloss();
+  if (lang !== 'en' && !(await glossDownloaded(lang))) startGlossDownload(lang);
+});
+
+// Revoking the permission elsewhere (chrome://extensions) should be reflected here.
+chrome.permissions.onRemoved?.addListener(({ origins = [] }) => {
+  if (origins.some((origin) => origin.startsWith(GLOSS_ORIGIN))) refreshGloss();
+});
+
 ankiEl.grant.addEventListener('click', async () => {
   // Must be called from a user gesture, which is why this lives on a button.
   const granted = await chrome.permissions.request({ origins: ANKI_ORIGINS });
@@ -400,6 +592,9 @@ ankiEl.enabled.addEventListener('change', () => {
 
 syncAnkiRows();
 if (ankiEl.enabled.checked) refreshAnki();
+// Awaited, unlike refreshAnki above: it reads IndexedDB, so firing it and moving on would let
+// the page announce itself ready with the language list still empty.
+await refreshGloss();
 
 // Report what the bundled dictionary actually contains, so a stale or missing build is obvious.
 try {

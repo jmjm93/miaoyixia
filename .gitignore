@@ -15,3 +15,7 @@ node_modules/
 *.zip
 *.crx
 *.pem
+
+# Batch API state (transient)
+translations/.batch-state.json
+translations/pilot-review.md

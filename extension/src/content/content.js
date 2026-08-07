@@ -403,17 +403,20 @@
     }
 
     const remaining = showAt - performance.now();
-    if (remaining > 1) showTimer = setTimeout(() => present(hit, result.candidates), remaining);
-    else present(hit, result.candidates);
+    if (remaining > 1) {
+      showTimer = setTimeout(() => present(hit, result.candidates, result.glossPending), remaining);
+    } else {
+      present(hit, result.candidates, result.glossPending);
+    }
   }
 
-  function present(hit, candidates) {
+  function present(hit, candidates, glossPending) {
     showTimer = 0;
     pendingKey = null;
     lastKey = hit.key;
     current = hit;
     anchor = { x: pointer.x, y: pointer.y };
-    popup.show(candidates, hit.rect);
+    popup.show(candidates, hit.rect, { glossPending });
   }
 
   // --- pronunciation -----------------------------------------------------------

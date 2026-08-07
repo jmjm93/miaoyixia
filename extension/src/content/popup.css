@@ -24,6 +24,9 @@
   --zh-border: #e2e5ea;
   --zh-hover: #f3f4f6;
   --zh-accent: #2563eb;
+  --zh-warn: #b45309;
+  --zh-warn-bg: #fef3c7;
+  --zh-warn-border: #f0b429;
   --zh-tone-1: #c0392b;
   --zh-tone-2: #b7791f;
   --zh-tone-3: #2f7d32;
@@ -59,6 +62,9 @@
     --zh-border: #34383f;
     --zh-hover: #2a2e35;
     --zh-accent: #7aa2f7;
+    --zh-warn: #1f2227;
+    --zh-warn-bg: #e0b060;
+    --zh-warn-border: #e0b060;
     --zh-tone-1: #f2777a;
     --zh-tone-2: #e0b060;
     --zh-tone-3: #8fc98f;
@@ -75,6 +81,9 @@
   --zh-border: #34383f;
   --zh-hover: #2a2e35;
   --zh-accent: #7aa2f7;
+  --zh-warn: #1f2227;
+  --zh-warn-bg: #e0b060;
+  --zh-warn-border: #e0b060;
   --zh-tone-1: #f2777a;
   --zh-tone-2: #e0b060;
   --zh-tone-3: #8fc98f;
@@ -378,9 +387,45 @@
   background: var(--zh-hover);
 }
 
+/* Hint text and, when there is one, the warning badge -- one strip across the bottom. */
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--zh-border);
+}
+
 .hint {
+  flex: 1;
   padding: 6px 12px 8px;
   font-size: calc(var(--zh-font-size) * 0.78);
   color: var(--zh-muted);
-  border-top: 1px solid var(--zh-border);
+}
+
+/* Amber, not red: the definitions on screen are correct, they are just not the language that
+   was asked for. Filled rather than outlined, because an outlined glyph at this size reads as
+   decoration and gets skipped -- which defeats the point of having it at all. */
+.warn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--zh-font-size) * 1.15);
+  height: calc(var(--zh-font-size) * 1.15);
+  margin-right: 10px;
+  font-size: calc(var(--zh-font-size) * 0.8);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--zh-warn);
+  background: var(--zh-warn-bg);
+  border: 1px solid var(--zh-warn-border);
+  border-radius: 50%;
+  cursor: help;
+}
+
+.warn[hidden] {
+  display: none;
+}
+
+.warn:hover {
+  filter: brightness(1.08);
 }

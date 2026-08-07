@@ -27,8 +27,14 @@ export function installDictStub() {
   };
 }
 
-/** Convenience for tests that just want render-ready candidates for a string. */
-export async function candidatesFor(text, context = {}) {
+/**
+ * Convenience for tests that just want render-ready candidates for a string.
+ *
+ * `translate` stands in for the downloadable gloss layer: given an entry's English senses it
+ * returns replacements, or null for an entry the layer doesn't cover. That null is the case
+ * worth exercising -- it is how a real partly-translated dictionary behaves.
+ */
+export async function candidatesFor(text, context = {}, translate = null) {
   const { lookupCandidates } = await import('../extension/src/lib/dict-store.js');
   const { buildCard } = await import('../extension/src/lib/card.js');
 
@@ -36,6 +42,6 @@ export async function candidatesFor(text, context = {}) {
   return matches.map(({ headword, length, entries }) => ({
     headword,
     length,
-    cards: entries.map((row) => buildCard(headword, row, context)),
+    cards: entries.map((row) => buildCard(headword, row, context, translate?.(row[3].split('/')) ?? null)),
   }));
 }

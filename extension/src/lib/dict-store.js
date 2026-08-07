@@ -4,18 +4,14 @@
 // starts with the same character, a lookup touches exactly one shard -- so even a
 // cold service worker answers after parsing ~130 KB instead of the whole 16 MB.
 
-const SHARD_COUNT = 128; // must match tools/build-dict.mjs
+import { shardFor } from './shard.js';
+
 const MAX_CACHED_SHARDS = 24;
 
 /** @type {Map<number, Record<string, string[][]>>} insertion-ordered, used as an LRU */
 const shardCache = new Map();
 /** @type {Promise<object>|null} */
 let metaPromise = null;
-
-/** Which shard holds words beginning with `char`. Mirrors tools/build-dict.mjs. */
-function shardFor(char) {
-  return char.codePointAt(0) % SHARD_COUNT;
-}
 
 export function loadMeta() {
   // Clear a rejected promise so a transient failure doesn't poison every later lookup.
