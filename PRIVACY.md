@@ -85,4 +85,4 @@ is visible in its history.
 ## Contact
 
 Questions or concerns: open an issue at
-<https://github.com/jmjm93/miaoyixia/issues>, or email `<ADD YOUR CONTACT EMAIL HERE>`.
+<https://github.com/jmjm93/miaoyixia/issues>, or email me at dd091193@gmail.com .
