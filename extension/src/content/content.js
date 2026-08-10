@@ -439,16 +439,26 @@
     if (source !== 'recording' && zh.speech.voiceAvailable()) {
       return zh.speech.speakWithVoice(card.headword, rate);
     }
-    if (source === 'voice') throw new Error('no-voice');
 
-    // The reading is passed too: many Commons files are named in pinyin, and matching it
-    // picks the recording for *this* reading rather than another of the same characters.
-    const result = await send({ type: 'audio', word: card.headword, pinyin: card.pinyin });
+    // Both scripts are passed because Lingua Libre names its files in simplified even for words
+    // whose traditional form differs, and the reading because many legacy files are named in
+    // pinyin -- which picks the recording for *this* reading rather than another of the same
+    // characters. 'voice' skips Commons: it asked for a synthetic voice, not a real one.
+    const result = await send({
+      type: 'audio',
+      word: card.headword,
+      pinyin: card.pinyin,
+      simplified: card.simplified,
+      traditional: card.traditional,
+      allowRecording: source !== 'voice',
+      allowTts: source !== 'recording',
+    });
     if (result.found) return zh.speech.playBytes(result.data, rate);
     if (result.error) throw new Error(`network: ${result.error}`);
 
-    // 'recording' means recordings only, so it does not fall back to the voice here.
-    throw new Error(source === 'recording' ? 'no-recording' : 'no-audio');
+    // 'recording' means recordings only, so it does not fall back to a synthetic voice here.
+    if (source === 'recording') throw new Error('no-recording');
+    throw new Error(source === 'voice' ? 'no-voice' : 'no-audio');
   }
 
   // --- Anki --------------------------------------------------------------------

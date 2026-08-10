@@ -57,8 +57,24 @@ export const DEFAULT_SETTINGS = {
    *   'voice'     OS voice only -- offline, but needs a Chinese voice installed
    *   'recording' Commons recordings only -- real speakers, but patchy coverage
    *   'off'       no play button at all
+   *
+   * Exported notes read this too, but can't use the OS voice -- nothing can capture
+   * SpeechSynthesis to a file -- so 'voice' is served by `ttsService` there instead. See
+   * exportAudioPlan() in the service worker.
    */
   audio: 'auto',
+  /**
+   * Which service synthesises a word Commons has no recording of, or 'off' to leave such notes
+   * silent.
+   *
+   * Not merely a convenience: Commons coverage is about 80% for the most frequent words but
+   * ~12% by rank 2000, and a traditional-only headword such as 於 has no recording in either
+   * script. Without this most mined notes would have an empty audio field.
+   *
+   * 'google' matches what Chinese Support 3 produces with its default `google|zh-CN` setting,
+   * so notes from both sources sound alike in one deck.
+   */
+  ttsService: 'google',
   /** Playback speed. Recordings are only ever slowed, never sped up. */
   speechRate: 0.9,
 
@@ -70,6 +86,16 @@ export const DEFAULT_SETTINGS = {
   ankiEnabled: false,
   ankiDeck: 'Mandarin::Chinese Mining',
   ankiModel: 'Chinese (Basic)',
+  /**
+   * Which script a note's headword is written in.
+   *   'hovered'     exactly what the page said -- whichever script that happens to be
+   *   'simplified'  always simplified, even when mining traditional text
+   *   'traditional' always traditional, even when mining simplified text
+   *
+   * Independent of `script`, which only chooses what the popup shows first. Someone studying
+   * simplified while reading Taiwanese material wants both: 個 on screen, 个 on the card.
+   */
+  ankiScript: 'hovered',
   /** field name -> token id, see anki-fields.js TOKENS */
   ankiFields: {
     Hanzi: 'headword',
@@ -102,4 +128,31 @@ export async function getSettings() {
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
   setLanguage(settings.uiLanguage);
   return settings;
+}
+
+/**
+ * Which sources an exported note may draw on, given the configured `audio` source.
+ *
+ * That setting was written for *playback*, where the OS voice is the best default: instant,
+ * offline, and it covers every entry. An exported note can't use it at all -- nothing can
+ * capture SpeechSynthesis to a file -- so 'voice' can't mean the same thing here. It is read as
+ * what the user was really asking for, a synthetic voice, and served by `ttsService` instead.
+ *
+ * Before this existed the export ignored the setting altogether and always used Commons, which
+ * is why a note could be silent while the popup played the word back perfectly well.
+ */
+export function exportAudioPlan(audio) {
+  switch (audio) {
+    case 'off':
+      return { recording: false, tts: false };
+    // Real speakers only, explicitly chosen. An empty field is the honest outcome here.
+    case 'recording':
+      return { recording: true, tts: false };
+    // A consistent synthetic voice, explicitly chosen; a recording would be the odd one out.
+    case 'voice':
+      return { recording: false, tts: true };
+    // Including anything unrecognised: settings written by a newer version must not go silent.
+    default:
+      return { recording: true, tts: true };
+  }
 }

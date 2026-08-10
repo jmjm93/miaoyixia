@@ -14,7 +14,7 @@ import {
   primaryField,
   sentenceWithWordBold,
 } from '../extension/src/lib/anki-fields.js';
-import { createClient, ensureTarget, reconcileMapping } from '../extension/src/lib/anki.js';
+import { createClient, ensureTarget, noteOptions, reconcileMapping } from '../extension/src/lib/anki.js';
 import { DEFAULT_SETTINGS } from '../extension/src/lib/settings.js';
 
 installDictStub();
@@ -163,6 +163,18 @@ test('classifies a duplicate distinctly from other refusals', async () => {
     { canAdd: false, duplicate: false, error: 'cannot create note because it is empty' },
     { canAdd: true, duplicate: false, error: '' },
   ]);
+});
+
+test('scopes the duplicate check to the target deck, not the whole collection', () => {
+  // AnkiConnect's default scope is the whole collection for the note type, which ignores the
+  // deck: a word already mined into one deck then came back as an unaddable duplicate in a
+  // brand new one. Two mining decks holding the same word is normal, not a mistake.
+  const options = noteOptions('Mandarin::Chinese Mining');
+  assert.equal(options.allowDuplicate, false, 'genuine in-deck duplicates are still refused');
+  assert.equal(options.duplicateScope, 'deck');
+  assert.equal(options.duplicateScopeOptions.deckName, 'Mandarin::Chinese Mining');
+  assert.equal(options.duplicateScopeOptions.checkChildren, true, 'the default deck has subdecks');
+  assert.equal(options.duplicateScopeOptions.checkAllModels, false, "follows Anki's own rule");
 });
 
 test('creates the deck and note type when missing, and says what it made', async () => {

@@ -9,7 +9,20 @@
       "PowerShell($c=@\\(\"$env:LOCALAPPDATA\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"$env:ProgramFiles\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\BraveSoftware\\\\Brave-Browser\\\\Application\\\\brave.exe\",\"$env:ProgramFiles\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\",\"${env:ProgramFiles\\(x86\\)}\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\",\"$env:LOCALAPPDATA\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\"\\); foreach\\($p in $c\\){ if\\(Test-Path $p\\){ \"FOUND $p\" } })",
       "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; Test-Path \"$sp\\\\node_modules\\\\puppeteer-core\")",
       "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; cd $sp; node smoke.mjs shot 2>&1 | Select-Object -Last 80)",
-      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; cd $sp; node diag.mjs 2>&1 | Select-Object -First 40)"
+      "PowerShell($sp=\"$env:TEMP\\\\claude\\\\d--code-zh-dic-anki\\\\19343522-e33e-4b96-b91e-7aa12cfd856d\\\\scratchpad\\\\harness\"; cd $sp; node diag.mjs 2>&1 | Select-Object -First 40)",
+      "Bash(curl -s -G \"https://commons.wikimedia.org/w/api.php\" --data-urlencode \"action=query\" --data-urlencode \"list=search\" --data-urlencode \"srsearch=intitle:於 filetype:audio\" --data-urlencode \"srnamespace=6\" --data-urlencode \"srlimit=50\" --data-urlencode \"format=json\" --data-urlencode \"formatversion=2\" -o yu.json)",
+      "Bash(python -c \"import json;d=json.load\\(open\\('yu.json',encoding='utf-8'\\)\\);h=d.get\\('query',{}\\).get\\('search',[]\\);print\\('hits:',len\\(h\\)\\);[print\\(' ',x['title']\\) for x in h]\")",
+      "Read(//c/Users/jmjm/AppData/Roaming/Anki2/addons21/1752008591/data/freq/**)",
+      "Bash(node coverage.mjs 60)",
+      "Bash(node coverage.mjs 50)",
+      "Bash(node bands.mjs)",
+      "Bash(grep -v '^[.x~E]*$')",
+      "Bash(curl -s -G \"https://commons.wikimedia.org/w/api.php\" --data-urlencode \"action=query\" --data-urlencode \"list=search\" --data-urlencode \"srsearch=intitle:于 filetype:audio\" --data-urlencode \"srnamespace=6\" --data-urlencode \"srlimit=50\" --data-urlencode \"format=json\" --data-urlencode \"formatversion=2\" -o yu2.json)",
+      "Bash(python -c ' *)",
+      "Bash(ps -W)",
+      "Bash(break)",
+      "Bash(node --test test/audio.test.mjs)",
+      "Bash(node --test test/tts.test.mjs)"
     ]
   }
 }

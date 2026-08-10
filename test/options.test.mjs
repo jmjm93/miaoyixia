@@ -124,29 +124,76 @@ async function loadOptions(options) {
   return state;
 }
 
-test('with no Chinese voice, the voice-dependent choices are disabled', async () => {
-  const state = await loadOptions({ audio: 'auto', voices: [] });
+test('with no Chinese voice, the synthesised fallback keeps those choices usable', async () => {
+  // The fallback can serve 'auto' and 'voice' without an OS voice, so greying them out would
+  // now be a lie -- and coercing them would switch the export off TTS, which is the one thing
+  // a user with no local voice depends on.
+  const state = await loadOptions({ audio: 'auto', voices: [], store: { ttsService: 'google' } });
+  assert.deepEqual(state.disabled, []);
+  assert.equal(state.selected, 'auto', 'the stored choice still works');
+  assert.deepEqual(state.persisted, [], 'nothing needs rewriting');
+});
+
+test('with neither a voice nor a fallback, the voice-dependent choices are disabled', async () => {
+  const state = await loadOptions({ audio: 'auto', voices: [], store: { ttsService: 'off' } });
   assert.deepEqual(state.disabled, ['auto', 'voice']);
   assert.equal(state.selected, 'recording', 'falls back to what will actually happen');
 });
 
 test('a stored "auto" is not rewritten, so installing a voice later restores it', async () => {
-  const state = await loadOptions({ audio: 'auto', voices: [] });
+  const state = await loadOptions({ audio: 'auto', voices: [], store: { ttsService: 'off' } });
   assert.deepEqual(state.persisted, [], 'auto already falls back; nothing needs saving');
 });
 
-test('a stored "voice" is corrected, because it cannot work at all', async () => {
-  const state = await loadOptions({ audio: 'voice', voices: [] });
-  assert.deepEqual(state.persisted, [{ audio: 'recording' }]);
-  assert.equal(state.selected, 'recording');
+test('a stored "voice" is corrected only when nothing at all can serve it', async () => {
+  const dead = await loadOptions({ audio: 'voice', voices: [], store: { ttsService: 'off' } });
+  assert.deepEqual(dead.persisted, [{ audio: 'recording' }]);
+  assert.equal(dead.selected, 'recording');
+
+  // But with a fallback configured it is a perfectly good choice, and must survive.
+  const served = await loadOptions({ audio: 'voice', voices: [], store: { ttsService: 'baidu' } });
+  assert.deepEqual(served.persisted, []);
+  assert.equal(served.selected, 'voice');
 });
 
 test('the install instructions are shown and opened when no voice is found', async () => {
   const state = await loadOptions({ audio: 'auto', voices: [] });
   assert.ok(state.statusVisible);
-  assert.ok(state.helpVisible, 'the help must show precisely when the options are greyed out');
+  assert.ok(state.helpVisible, 'the help belongs wherever the voice is missing');
   assert.match(state.status, /No Chinese voice is installed/);
   assert.match(state.status, /better option of the two/, 'should recommend the voice over Commons');
+});
+
+test('the fallback row explains itself rather than vanishing', async () => {
+  const rowState = async (audio) => {
+    const { page, failures } = await openOptions({ audio, voices: [ZH_VOICE] });
+    const state = await page.evaluate(() => ({
+      hidden: document.getElementById('ttsServiceRow').hidden,
+      disabled: document.getElementById('ttsService').disabled,
+      hint: document.getElementById('ttsServiceHint').textContent,
+    }));
+    assert.deepEqual(failures, [], 'unexpected page errors');
+    await page.close();
+    return state;
+  };
+
+  // Only "no audio at all" makes the row meaningless.
+  assert.equal((await rowState('off')).hidden, true);
+
+  // 'recording' ignores the fallback, but must say so rather than hide. An older build wrote
+  // that value by itself whenever no Chinese voice was installed, so a user can be sitting on
+  // it without ever having chosen it -- and hiding the row left them no way to find out.
+  const recording = await rowState('recording');
+  assert.equal(recording.hidden, false, 'the explanation must be reachable');
+  assert.equal(recording.disabled, true);
+  assert.match(recording.hint, /Not used/);
+
+  for (const audio of ['auto', 'voice']) {
+    const state = await rowState(audio);
+    assert.equal(state.hidden, false, audio);
+    assert.equal(state.disabled, false, audio);
+    assert.match(state.hint, /no recording exists/, audio);
+  }
 });
 
 test('"no audio" hides the voice guidance entirely', async () => {
@@ -219,9 +266,9 @@ test('the page renders in Spanish when that is the stored language', async () =>
   assert.equal(text.noKey, CATALOGUE.es.noKey);
 
   // Strings assembled in JS rather than replaced in the markup.
-  // Shows the recording hint, not the "auto" one: with no voice installed the select is
-  // displayed as the option that will actually be used. Either way it comes from AUDIO_HINTS.
-  assert.equal(text.audioHint, CATALOGUE.es.audioHintRecording);
+  // The stored 'auto' survives even with no voice installed, because the synthesised fallback
+  // can serve it, so this is the "auto" hint. Either way it comes from AUDIO_HINTS.
+  assert.equal(text.audioHint, CATALOGUE.es.audioHintAuto);
   assert.match(text.voiceStatus, /No hay ninguna voz en chino/, 'live voice status');
   assert.equal(text.firstToken, CATALOGUE.es.tokenNone, 'the Anki field tokens are built in JS');
 

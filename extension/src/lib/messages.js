@@ -76,6 +76,15 @@
       audioHintVoice: 'Offline and instant, covers every entry — but needs a Chinese voice installed.',
       audioHintRecording: 'Real speakers from Wikimedia Commons. Only common words have one.',
       audioHintOff: 'Hides the play button entirely.',
+      ttsService: 'Synthesised fallback',
+      ttsServiceHint:
+        'Used for Anki notes when no recording exists — most words past the first few hundred have none',
+      ttsServiceHintInert:
+        'Not used: “Wikimedia recordings only” means real speakers, so words without a recording ' +
+        'get no audio. Choose another audio source to enable this.',
+      ttsGoogle: 'Google Translate',
+      ttsBaidu: 'Baidu Translate',
+      ttsOff: 'None — leave silent',
       playbackSpeed: 'Playback speed',
       playbackSpeedHint: 'Recordings are only ever slowed, never sped up',
       voiceChecking: 'Checking for Chinese voices…',
@@ -118,6 +127,11 @@
       deckHint: 'Created automatically if it doesn’t exist yet',
       noteType: 'Note type',
       noteTypeHint: 'Also created automatically, with tone colouring',
+      ankiScript: 'Write characters as',
+      ankiScriptHint: 'Keeps one deck in a single script even when the pages you read are not',
+      ankiScriptHovered: 'As written on the page',
+      ankiScriptSimplified: 'Always simplified',
+      ankiScriptTraditional: 'Always traditional',
       tags: 'Tags',
       fields: 'Fields',
       fieldsNote:
@@ -255,6 +269,16 @@
       audioHintRecording:
         'Grabaciones de personas reales de Wikimedia Commons. Pero no todas las palabras tienen audio.',
       audioHintOff: 'Oculta por completo el botón de reproducción.',
+      ttsService: 'Voz sintética de reserva',
+      ttsServiceHint:
+        'Se usa en las notas de Anki cuando no hay grabación — la mayoría de las palabras poco ' +
+        'frecuentes no la tienen',
+      ttsServiceHintInert:
+        'Sin usar: «Solo grabaciones de Wikimedia» significa personas reales, así que las ' +
+        'palabras sin grabación se quedan sin audio. Elige otra fuente para activarla.',
+      ttsGoogle: 'Google Translate',
+      ttsBaidu: 'Baidu Translate',
+      ttsOff: 'Ninguna — dejar sin sonido',
       playbackSpeed: 'Velocidad de reproducción',
       playbackSpeedHint: 'Las grabaciones solo se ralentizan, nunca se aceleran',
       voiceChecking: 'Buscando voces en chino…',
@@ -299,6 +323,12 @@
       deckHint: 'Se crea automáticamente si aún no existe',
       noteType: 'Tipo de nota',
       noteTypeHint: 'También se crea automáticamente, con colores de tono',
+      ankiScript: 'Escribir los caracteres en',
+      ankiScriptHint:
+        'Mantiene el mazo en una sola escritura aunque las páginas que leas no lo estén',
+      ankiScriptHovered: 'Como aparecen en la página',
+      ankiScriptSimplified: 'Siempre simplificado',
+      ankiScriptTraditional: 'Siempre tradicional',
       tags: 'Etiquetas',
       fields: 'Campos',
       fieldsNote:

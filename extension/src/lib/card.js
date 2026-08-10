@@ -45,6 +45,11 @@ export function buildCard(headword, row, context = {}, translated = null) {
 
   return {
     headword,
+    /**
+     * The form as it appeared on the page, kept even when `headword` is rewritten to the other
+     * script for export. Only the page's own wording can be found in the page's own sentence.
+     */
+    hovered: headword,
     simplified,
     // Blank in the shard means "same as simplified"; callers shouldn't special-case it.
     traditional: traditional || simplified,
@@ -59,4 +64,23 @@ export function buildCard(headword, row, context = {}, translated = null) {
     sourceUrl: context.url ?? '',
     sourceTitle: context.title ?? '',
   };
+}
+
+/**
+ * The same card with its headword forced to one script, for export.
+ *
+ * Someone who studies simplified but reads Taiwanese material -- or the reverse -- otherwise
+ * ends up with a deck in two scripts depending on where each word was mined. `hovered` is left
+ * alone, so the example sentence still bolds the form the page actually used.
+ *
+ * @param {object} card a buildCard() result
+ * @param {'hovered'|'simplified'|'traditional'} preference
+ */
+export function applyScript(card, preference) {
+  const wanted = preference === 'simplified' ? card.simplified : preference === 'traditional' ? card.traditional : '';
+  // Tone colouring pairs each character with a syllable, and the two scripts are a per-character
+  // mapping, so the pairing survives. A form that is missing or a different length would not,
+  // and is left as it was rather than mangled.
+  if (!wanted || wanted === card.headword || [...wanted].length !== [...card.headword].length) return card;
+  return { ...card, headword: wanted };
 }

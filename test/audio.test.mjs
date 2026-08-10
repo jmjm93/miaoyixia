@@ -18,6 +18,19 @@ test('extracts the spoken word from Lingua Libre filenames', () => {
   assert.equal(spokenTextOf('LL-Q727694 (cmn)-Shangkuanlc-学习.wav'), '学习');
 });
 
+test('extracts the spoken word when the separator is not an ASCII hyphen', () => {
+  // Real Commons file. Splitting on '-' alone finds the hyphen inside "LL-Q9192" and yields
+  // "Q9192—Yug—个", losing a recording of one of the commonest words in the language.
+  assert.equal(spokenTextOf('LL-Q9192—Yug—个.wav'), '个');
+  assert.ok(matchesWord('LL-Q9192—Yug—个.wav', '个'));
+  // En dash and non-breaking hyphen turn up too.
+  assert.equal(spokenTextOf('LL-Q9192 (cmn)–Speaker–谢谢.wav'), '谢谢');
+  assert.equal(spokenTextOf('LL-Q9192 (cmn)‑Speaker‑谢谢.wav'), '谢谢');
+  // The language filter has to read the normalised name as well, or a dashed Cantonese file
+  // would slip past NOT_MANDARIN and be played as Mandarin.
+  assert.ok(!matchesWord('LL-Q9186—Luilui6666—个.wav', '个'), 'Cantonese, em-dashed');
+});
+
 test('extracts the spoken word from legacy Zh- filenames', () => {
   assert.equal(spokenTextOf('Zh-你好.ogg'), '你好');
   assert.equal(spokenTextOf('Zh nǐ hǎo.ogg'), 'nǐ hǎo');

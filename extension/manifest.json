@@ -7,7 +7,9 @@
   "permissions": ["storage", "contextMenus", "unlimitedStorage"],
   "host_permissions": [
     "https://commons.wikimedia.org/*",
-    "https://upload.wikimedia.org/*"
+    "https://upload.wikimedia.org/*",
+    "https://translate.google.com/*",
+    "https://fanyi.baidu.com/*"
   ],
   "optional_host_permissions": [
     "http://127.0.0.1:8765/*",

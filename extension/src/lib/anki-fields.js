@@ -47,11 +47,17 @@ export function colouredPinyin(card) {
   return toneless ? `${spans} <!-- ${escapeHtml(toneless)} -->` : spans;
 }
 
-/** The sentence the word was found in, with that word emboldened. */
+/**
+ * The sentence the word was found in, with that word emboldened.
+ *
+ * Matched on `hovered` rather than `headword`: the export can rewrite the headword to the other
+ * script, and 個 is not findable in a sentence that says 个.
+ */
 export function sentenceWithWordBold(card) {
   const sentence = escapeHtml(card.sentence);
-  if (!card.sentence || !card.headword) return sentence;
-  const word = escapeHtml(card.headword);
+  const found = card.hovered || card.headword;
+  if (!card.sentence || !found) return sentence;
+  const word = escapeHtml(found);
   return sentence.replace(word, `<b>${word}</b>`);
 }
 

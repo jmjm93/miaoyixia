@@ -13,6 +13,29 @@ const API_VERSION = 6;
 /** AnkiConnect's wording when Anki itself refuses a note for being a duplicate. */
 const DUPLICATE = /duplicate/i;
 
+/**
+ * The `options` every note is sent with, inspected or added.
+ *
+ * Duplicates are scoped to the target deck. AnkiConnect's default is the whole collection for
+ * the note type, which ignores the deck entirely -- so a word already mined into one deck came
+ * back as a duplicate in a brand new one, with no way to add it. A mining deck is a working set,
+ * and the same word belonging to two of them is the normal case, not a mistake.
+ *
+ * `checkChildren` because the shipped default deck has subdecks ("Mandarin::Chinese Mining"),
+ * and a word in a child deck is genuinely already in that tree. `checkAllModels` stays off so
+ * the check follows Anki's own rule of comparing within one note type.
+ *
+ * Used by both the inspect and the add path on purpose: if they disagreed, the button would
+ * offer a note that the add then refuses.
+ */
+export function noteOptions(deckName) {
+  return {
+    allowDuplicate: false,
+    duplicateScope: 'deck',
+    duplicateScopeOptions: { deckName, checkChildren: true, checkAllModels: false },
+  };
+}
+
 export class AnkiUnreachableError extends Error {}
 
 /**
@@ -51,7 +74,8 @@ export function createClient(transport) {
     /**
      * Ask Anki whether each note could be added, and say why not.
      * This is the authoritative duplicate check: it uses Anki's own logic on the note type's
-     * first field, so a greyed-out button matches exactly what Anki would refuse.
+     * first field, so a greyed-out button matches exactly what Anki would refuse -- provided
+     * both sides ask the same question, which is what noteOptions() is for.
      */
     async inspect(notes) {
       const results = await invoke('canAddNotesWithErrorDetail', { notes });

@@ -24,6 +24,19 @@ const MANDARIN = /^zh[-_ ]|\(cmn\)|LL-Q9192|LL-Q727694/i;
 const NOT_MANDARIN = /zh[-_]yue|\((yue|nan|hak|wuu|cdo|cjy|hsn|gan|lzh)\)|LL-Q9186|LL-Q7850|^(ja|ko|vi|th)[-_ ]/i;
 
 /**
+ * Contributors don't all use an ASCII hyphen as the separator: "LL-Q9192—Yug—个.wav" uses em
+ * dashes, and splitting on '-' alone finds the one inside "LL-Q9192" instead, yielding
+ * "Q9192—Yug—个". Every variant here is a single UTF-16 code unit, so indexes found in the
+ * normalised string still address the original -- which matters, because the *word* must be
+ * sliced from the original in case it legitimately contains one of these.
+ */
+const DASHES = /[‐‑‒–—―−]/g;
+
+function normaliseDashes(text) {
+  return text.replace(DASHES, '-');
+}
+
+/**
  * The word a pronunciation file claims to say, or '' if the name doesn't follow a known
  * convention. Two conventions cover essentially everything on Commons:
  *   Lingua Libre  "LL-Q9192 (cmn)-Speaker-你好.wav"  -> 你好
@@ -31,15 +44,17 @@ const NOT_MANDARIN = /zh[-_]yue|\((yue|nan|hak|wuu|cdo|cjy|hsn|gan|lzh)\)|LL-Q91
  */
 export function spokenTextOf(filename) {
   const base = filename.replace(/^File:/, '').replace(AUDIO_EXT, '');
+  const dashed = normaliseDashes(base);
 
-  if (/^LL-Q\d+/i.test(base)) {
+  if (/^LL-Q\d+/i.test(dashed)) {
     // Speaker names may contain hyphens and spaces; the word is always the final segment.
-    const cut = base.lastIndexOf('-');
+    const cut = dashed.lastIndexOf('-');
     return cut === -1 ? '' : base.slice(cut + 1).trim();
   }
 
-  const legacy = /^zh(?:[-_ ](?:tw|cn|hans|hant))?[-_ ](.+)$/i.exec(base);
-  return legacy ? legacy[1].trim() : '';
+  const legacy = /^zh(?:[-_ ](?:tw|cn|hans|hant))?[-_ ](.+)$/i.exec(dashed);
+  // Matched against the normalised name, but returned from the original.
+  return legacy ? base.slice(base.length - legacy[1].length).trim() : '';
 }
 
 /** Pinyin comparison has to survive case and spacing differences between contributors. */
@@ -54,7 +69,9 @@ function normalise(text) {
  */
 export function matchesWord(filename, word, pinyin = '') {
   if (!AUDIO_EXT.test(filename)) return false;
-  if (!MANDARIN.test(filename) || NOT_MANDARIN.test(filename)) return false;
+  // Language tags carry separators too, so they are read from the normalised name as well.
+  const tagged = normaliseDashes(filename);
+  if (!MANDARIN.test(tagged) || NOT_MANDARIN.test(tagged)) return false;
 
   const spoken = spokenTextOf(filename);
   if (!spoken) return false;
@@ -84,6 +101,20 @@ export async function searchRecordings(word, pinyin, getJson) {
   // Prefer Lingua Libre: those are deliberate single-word recordings by known speakers,
   // whereas legacy Zh- files are sometimes clipped from longer material.
   return exact.sort((a, b) => Number(/^LL-Q/i.test(b)) - Number(/^LL-Q/i.test(a)));
+}
+
+/**
+ * The forms of a word worth searching for, best first and without duplicates.
+ *
+ * Lingua Libre's Mandarin campaign works from simplified word lists, so its filenames are
+ * simplified even for words whose traditional form differs: 与 is recorded, 與 is not. Measured
+ * over 25 common words where the two scripts differ, searching the traditional form as written
+ * hit 4% where the simplified form hit 68%. The hovered form is still tried first -- it is what
+ * the user asked for, and legacy Zh-tw- files do exist -- but stopping there loses most of the
+ * coverage for anyone reading traditional text.
+ */
+export function searchForms({ word, simplified = '', traditional = '' }) {
+  return [...new Set([word, simplified, traditional].filter(Boolean))];
 }
 
 export function fileUrl(filename) {

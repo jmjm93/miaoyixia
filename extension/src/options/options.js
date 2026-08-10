@@ -144,6 +144,14 @@ function syncConditionalRows() {
   const audio = document.getElementById('audio').value;
   document.getElementById('speechRateRow').hidden = audio === 'off';
   document.getElementById('audioHint').textContent = AUDIO_HINTS[audio] ? t(AUDIO_HINTS[audio]) : '';
+  // Only genuinely meaningless when there is no audio at all. 'recording' does ignore the
+  // fallback, but the row stays visible and inert for it: hiding the one control that explains
+  // why a note came out silent is how a stored 'recording' -- which an older build wrote by
+  // itself whenever no Chinese voice was installed -- turned into an invisible dead end.
+  const inert = audio === 'recording';
+  document.getElementById('ttsServiceRow').hidden = audio === 'off';
+  document.getElementById('ttsService').disabled = inert;
+  document.getElementById('ttsServiceHint').textContent = t(inert ? 'ttsServiceHintInert' : 'ttsServiceHint');
 
   // Keyed on whether a voice exists rather than on the current choice: the instructions are
   // needed most when the voice options have just been greyed out.
@@ -153,22 +161,28 @@ function syncConditionalRows() {
 }
 
 /**
- * Offer the voice-dependent choices only when a voice can actually serve them.
+ * Offer the voice-dependent choices only when something can actually serve them.
  *
- * 'voice' would simply fail without one, so a stored 'voice' is corrected in storage. 'auto'
- * already falls back to a recording, so it behaves correctly as-is and is left stored
- * untouched -- only *displayed* as the recording option it currently resolves to. Persisting
- * that coercion would strand the user on recordings-only after they install a voice, which is
- * the opposite of what they'd want.
+ * A synthesised fallback serves them too, so these choices are only unusable when there is no
+ * OS voice *and* no fallback configured. That distinction matters: coercing a stored 'voice' to
+ * 'recording' would also switch the export off TTS and back onto Commons, quietly undoing the
+ * fallback for exactly the user who has no local voice and needs it most.
+ *
+ * 'auto' already degrades correctly on its own, so it is left stored untouched and only
+ * *displayed* as what it currently resolves to. Persisting that would strand the user on
+ * recordings-only after they install a voice, which is the opposite of what they'd want.
  */
 function syncVoiceDependentOptions() {
   const select = document.getElementById('audio');
+  const canSynthesise = settings.ttsService !== 'off';
+  const usable = hasChineseVoice || canSynthesise;
+
   for (const value of VOICE_DEPENDENT) {
-    select.querySelector(`option[value="${value}"]`).disabled = !hasChineseVoice;
+    select.querySelector(`option[value="${value}"]`).disabled = !usable;
   }
 
-  if (hasChineseVoice) {
-    select.value = settings.audio; // a voice appeared: honour the stored choice again
+  if (hasChineseVoice || canSynthesise) {
+    select.value = settings.audio; // something can serve it: honour the stored choice
   } else if (settings.audio === 'voice') {
     settings.audio = 'recording';
     select.value = 'recording';
@@ -231,6 +245,9 @@ for (const key of Object.keys(DEFAULT_SETTINGS)) {
     settings[key] = value;
     writeControl(input, value);
     syncConditionalRows();
+    // Turning the fallback off can make the voice-dependent choices unusable, and turning it
+    // back on can revive them, so that pass has to re-run rather than only firing on startup.
+    if (key === 'ttsService') syncVoiceDependentOptions();
     chrome.storage.sync.set({ [key]: value }).then(flashSaved);
   });
 }

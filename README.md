@@ -61,6 +61,23 @@ separately.
 
 Highly recommended to install Chinese voice on the computer as Wikimedia is not exhaustive and rate-capped.
 
+**Synthesised fallback** covers what Commons doesn't. Measured against the matcher this
+extension uses, Commons has a recording for about 80% of the 25 most frequent words but only
+~12% by frequency rank 2000 — and mined vocabulary lives well past that. A traditional-only
+headword such as 於 has none in either script. Without a fallback most exported notes would get
+an empty audio field, so this defaults to *Google Translate*, which is what
+[Chinese Support 3](https://github.com/luoliyan/chinese-support-redux) produces with its own
+default settings — notes from both sources then sound alike in one deck. *Baidu Translate* is
+the alternative, and *None* leaves such notes silent.
+
+Both are undocumented endpoints belonging to consumer web apps rather than public APIs, so
+either can stop working without notice. A failure is never fatal: the note is added without
+audio.
+
+This is also what *Computer voice only* uses for exported notes, since nothing can capture the
+OS voice to a file. *Wikimedia recordings only* never uses it — that setting means real
+speakers, and an empty field is the honest outcome.
+
 **Playback speed** (0.5–1.2×) only ever *slows* playback. A human recording is already
 correctly paced, so it's never sped up.
 
@@ -76,6 +93,14 @@ button, so a default install never touches localhost.
 **Connection** checks AnkiConnect and reports its version and how many decks it can see.
 
 **Deck** and **Note type** specify which Deck or Notes should be used to add data. If they don't exist they'll be created.
+
+**Write characters as** forces every note into one script regardless of the page it was mined
+from. *As written on the page* is the default and changes nothing. *Always simplified* and
+*Always traditional* rewrite the headword, which is what you want if you study one script but
+read material in the other — 個 stays on screen while 个 goes on the card. The example sentence
+still bolds the form the page actually used, since that's the only form it contains.
+
+It's separate from **Show script** on purpose: that one only decides what the popup leads with.
 
 **Tags** are space-separated and applied to every note added.
 

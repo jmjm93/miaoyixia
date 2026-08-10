@@ -98,6 +98,19 @@
           </select>
         </label>
 
+        <label class="row" id="ttsServiceRow">
+          <span>
+            <span data-i18n="ttsService">Synthesised fallback</span>
+            <!-- Set from JS, like audioHint: the text depends on the chosen audio source. -->
+            <small id="ttsServiceHint"></small>
+          </span>
+          <select id="ttsService">
+            <option value="google" data-i18n="ttsGoogle">Google Translate</option>
+            <option value="baidu" data-i18n="ttsBaidu">Baidu Translate</option>
+            <option value="off" data-i18n="ttsOff">None — leave silent</option>
+          </select>
+        </label>
+
         <label class="row" id="speechRateRow">
           <span>
             <span data-i18n="playbackSpeed">Playback speed</span>
@@ -171,6 +184,19 @@
             <input type="text" id="ankiModel" list="ankiModelList" spellcheck="false" />
             <datalist id="ankiModelList"></datalist>
           </span>
+        </label>
+
+        <label class="row">
+          <span>
+            <span data-i18n="ankiScript">Write characters as</span>
+            <small data-i18n="ankiScriptHint">Keeps one deck in a single script even when the
+              pages you read are not</small>
+          </span>
+          <select id="ankiScript">
+            <option value="hovered" data-i18n="ankiScriptHovered">As written on the page</option>
+            <option value="simplified" data-i18n="ankiScriptSimplified">Always simplified</option>
+            <option value="traditional" data-i18n="ankiScriptTraditional">Always traditional</option>
+          </select>
         </label>
 
         <label class="row">

@@ -5,11 +5,12 @@
 // than one per tab, and keeps the content script small enough to inject everywhere.
 
 import { loadMeta, lookupCandidates } from '../lib/dict-store.js';
-import { buildCard } from '../lib/card.js';
+import { applyScript, buildCard } from '../lib/card.js';
 import { clearGlosses, glossFor, glossInfo, glossReady, resetGlossReady } from '../lib/gloss-store.js';
-import { getSettings } from '../lib/settings.js';
-import { fileUrl, searchRecordings } from '../lib/audio-source.js';
-import { createClient, ensureTarget, reconcileMapping } from '../lib/anki.js';
+import { exportAudioPlan, getSettings } from '../lib/settings.js';
+import { fileUrl, searchForms, searchRecordings } from '../lib/audio-source.js';
+import { synthesise } from '../lib/tts-source.js';
+import { createClient, ensureTarget, noteOptions, reconcileMapping } from '../lib/anki.js';
 import { buildFields } from '../lib/anki-fields.js';
 import { MENU, actionTitle, iconPaths, menuState, rememberModifier, trigger } from '../lib/action-state.js';
 import { t } from '../lib/i18n.js';
@@ -21,6 +22,13 @@ import { t } from '../lib/i18n.js';
  */
 const audioCache = new Map();
 const MAX_CACHED_AUDIO = 24;
+
+/**
+ * Synthesised audio, kept apart from `audioCache` rather than sharing it. A caller that
+ * insists on real recordings must never be handed a cached synthetic one, and keying by
+ * service means switching provider in the options page doesn't serve the old voice.
+ */
+const ttsCache = new Map();
 
 /**
  * Turn the forward-text the content script read at the cursor into tabs, one per
@@ -104,16 +112,16 @@ async function getJson(url) {
  * rather than a URL, so that playback needs no <audio> element in the page -- a page's CSP
  * `media-src` would otherwise block it. Only ever called from a click, never on hover.
  */
-async function handleAudio({ word, pinyin = '' }) {
-  const key = `${word} ${pinyin}`;
+async function findRecording({ word, pinyin = '', simplified = '', traditional = '' }) {
+  const forms = searchForms({ word, simplified, traditional });
+  const key = `${forms.join('/')} ${pinyin}`;
   if (audioCache.has(key)) return audioCache.get(key);
 
-  let result;
+  let result = { found: false };
   try {
-    const names = await searchRecordings(word, pinyin, getJson);
-    if (!names.length) {
-      result = { found: false };
-    } else {
+    for (const form of forms) {
+      const names = await searchRecordings(form, pinyin, getJson);
+      if (!names.length) continue;
       const response = await fetch(fileUrl(names[0]));
       if (!response.ok) throw new Error(`audio fetch failed: ${response.status}`);
       result = {
@@ -122,6 +130,7 @@ async function handleAudio({ word, pinyin = '' }) {
         mime: response.headers.get('content-type') ?? '',
         data: toBase64(await response.arrayBuffer()),
       };
+      break;
     }
   } catch (error) {
     // Rate limiting or a network blip: report it, but don't cache a failure that may pass.
@@ -133,13 +142,76 @@ async function handleAudio({ word, pinyin = '' }) {
   return result;
 }
 
+/** Synthesise `word`, or return a miss. Never throws: a failed fallback must not lose a note. */
+async function findSynthesised(word, { service, rate }) {
+  if (!service || service === 'off' || !word) return { found: false };
+
+  const key = `${service} ${word}`;
+  if (ttsCache.has(key)) return ttsCache.get(key);
+
+  let result;
+  try {
+    const audio = await synthesise(word, { service, rate });
+    result = audio
+      ? { found: true, name: `${word}${audio.extension}`, mime: audio.mime, data: toBase64(audio.data), tts: service }
+      : { found: false };
+  } catch (error) {
+    // An undocumented endpoint that has changed or is throttling. Don't cache it -- the next
+    // word may well work -- and let the caller carry on without audio.
+    return { found: false, error: String(error?.message ?? error) };
+  }
+
+  ttsCache.set(key, result);
+  while (ttsCache.size > MAX_CACHED_AUDIO) ttsCache.delete(ttsCache.keys().next().value);
+  return result;
+}
+
+/**
+ * Pronunciation for one word: a real recording where Commons has one, otherwise a synthesised
+ * one. The two flags are what let each audio source mean only what it says -- 'recording' must
+ * never return a synthetic voice, and 'voice' must not spend a Commons round trip. See
+ * exportAudioPlan() for the mapping.
+ */
+async function handleAudio({
+  word,
+  pinyin = '',
+  simplified = '',
+  traditional = '',
+  allowRecording = true,
+  allowTts = true,
+}) {
+  const settings = await getSettings();
+  const recording = allowRecording
+    ? await findRecording({ word, pinyin, simplified, traditional })
+    : { found: false };
+  if (recording.found || !allowTts) return recording;
+
+  const synthetic = await findSynthesised(word, {
+    service: settings.ttsService,
+    rate: settings.speechRate,
+  });
+  // A recording error is the more useful one to report if neither source produced anything.
+  if (!synthetic.found && recording.error) return recording;
+  return synthetic;
+}
+
 // --- Anki -------------------------------------------------------------------
 
 const anki = createClient();
 
 /** Fetch the audio for a card without re-downloading it if it's already cached. */
-async function audioFor(card) {
-  const result = await handleAudio({ word: card.headword, pinyin: card.pinyin });
+async function audioFor(card, settings) {
+  const plan = exportAudioPlan(settings.audio);
+  if (!plan.recording && !plan.tts) return null;
+
+  const result = await handleAudio({
+    word: card.headword,
+    pinyin: card.pinyin,
+    simplified: card.simplified,
+    traditional: card.traditional,
+    allowRecording: plan.recording,
+    allowTts: plan.tts,
+  });
   return result.found ? result : null;
 }
 
@@ -170,11 +242,13 @@ async function handleAnkiInspect({ cards }) {
 
   const fields = await anki.modelFieldNames(settings.ankiModel);
   const mapping = reconcileMapping(settings.ankiFields, fields);
+  // Normalised the same way the add path will, or duplicate detection would compare a form
+  // that is never written -- reporting 個 as addable when the deck already holds 个.
   const notes = cards.map((card) => ({
     deckName: settings.ankiDeck,
     modelName: settings.ankiModel,
-    fields: buildFields(mapping, card),
-    options: { allowDuplicate: false },
+    fields: buildFields(mapping, applyScript(card, settings.ankiScript)),
+    options: noteOptions(settings.ankiDeck),
   }));
 
   return { ready: true, states: await anki.inspect(notes) };
@@ -191,27 +265,36 @@ async function handleAnkiAdd({ card }) {
 
   const fields = await anki.modelFieldNames(settings.ankiModel);
   const mapping = reconcileMapping(settings.ankiFields, fields);
+  const written = applyScript(card, settings.ankiScript);
 
   // Only bother fetching audio when a field actually wants it.
   let audioFilename = '';
+  let audioSource = '';
   if (Object.values(mapping).includes('audio')) {
-    const audio = await audioFor(card);
+    const audio = await audioFor(written, settings);
     if (audio) {
       const extension = audio.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.mp3';
-      // Named so notes from this extension are distinguishable from other sources'.
-      audioFilename = await anki.storeMedia(`${card.headword}_miaoyixia_zh-CN${extension}`, audio.data);
+      // Named so notes from this extension are distinguishable from other sources', and so the
+      // provider is visible in the media folder: a voice someone dislikes can then be found and
+      // replaced without guessing which files came from where.
+      const provider = audio.tts ? audio.tts : 'commons';
+      audioFilename = await anki.storeMedia(
+        `${written.headword}_miaoyixia_${provider}_zh-CN${extension}`,
+        audio.data,
+      );
+      audioSource = audio.tts ? 'tts' : 'recording';
     }
   }
 
   const noteId = await anki.addNote({
     deckName: settings.ankiDeck,
     modelName: settings.ankiModel,
-    fields: buildFields(mapping, card, { audioFilename }),
+    fields: buildFields(mapping, written, { audioFilename }),
     tags: settings.ankiTags.split(/\s+/).filter(Boolean),
-    options: { allowDuplicate: false },
+    options: noteOptions(settings.ankiDeck),
   });
 
-  return { noteId, created, audio: Boolean(audioFilename), deck: settings.ankiDeck };
+  return { noteId, created, audio: Boolean(audioFilename), audioSource, deck: settings.ankiDeck };
 }
 
 const HANDLERS = {
