@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "contextMenus", "unlimitedStorage"],
+  "permissions": ["storage", "contextMenus", "unlimitedStorage", "activeTab"],
   "host_permissions": [
     "https://commons.wikimedia.org/*",
     "https://upload.wikimedia.org/*",
@@ -27,7 +27,11 @@
         "src/lib/messages.js",
         "src/content/text-at-point.js",
         "src/content/speech.js",
+        "src/content/entry-view.js",
         "src/content/popup.js",
+        "src/content/snip.js",
+        "src/content/capture.js",
+        "src/content/result.js",
         "src/content/content.js"
       ],
       "run_at": "document_idle",
@@ -36,7 +40,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/content/popup.css"],
+      "resources": ["src/content/popup.css", "src/content/snip.css", "src/content/result.css"],
       "matches": ["<all_urls>"]
     }
   ],

@@ -1,0 +1,77 @@
+/* Styles for the snip overlay's shadow root. As in popup.css, `all: initial` on the host stops
+   inherited page styles from leaking in, and everything needed is then declared explicitly. */
+
+:host {
+  all: initial;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  display: block;
+}
+
+.sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  cursor: crosshair;
+  /* Children inherit this, so the label and the rectangle don't flicker the cursor back. */
+  font: 500 12px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Zero-sized until a drag starts, at which point the spread shadow -- which reaches a full
+   viewport in every direction -- stops being a full-page dim and becomes the area outside the
+   selection. Same element, both states. */
+.rect {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  box-shadow: 0 0 0 100vmax rgba(15, 23, 42, 0.45);
+}
+
+.rect.drawing {
+  outline: 1px solid rgba(255, 255, 255, 0.95);
+  /* A second, darker ring so the edge stays visible over white speech bubbles, which is most
+     of what this gets dragged over. */
+  border: 1px solid rgba(15, 23, 42, 0.55);
+  margin: -1px 0 0 -1px;
+}
+
+.size {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rect:not(.drawing) .size {
+  display: none;
+}
+
+.hint {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.hint[hidden] {
+  display: none;
+}

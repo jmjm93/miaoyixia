@@ -41,7 +41,11 @@ const CONTENT_SCRIPTS = [
   '../lib/messages.js',
   'text-at-point.js',
   'speech.js',
+  'entry-view.js',
   'popup.js',
+  'snip.js',
+  'capture.js',
+  'result.js',
   'content.js',
 ];
 
@@ -152,12 +156,38 @@ async function openPage(
        },
      });
 
+     // Stands in for captureVisibleTab: a white viewport with one red block at a known place, so
+     // a crop can be checked against the region that was actually dragged rather than merely
+     // against its size. Painted at devicePixelRatio, the way a real capture arrives.
+     //
+     // Sized from innerWidth/innerHeight, which is what captureVisibleTab actually returns --
+     // the viewport *including* its scrollbars. Painting it at documentElement.clientWidth
+     // instead baked the crop's own bug into the fixture, so the test could not have caught it.
+     //
+     // The region sits well to the right for the same reason: a scale error displaces the crop
+     // in proportion to the distance from the left edge, so a region near x=0 hides it.
+     window.__captureRegion = { x: 600, y: 140, width: 180, height: 120 };
+     window.__fakeCapture = () => {
+       const dpr = window.devicePixelRatio || 1;
+       const canvas = document.createElement('canvas');
+       canvas.width = Math.round(window.innerWidth * dpr);
+       canvas.height = Math.round(window.innerHeight * dpr);
+       const ctx = canvas.getContext('2d');
+       ctx.fillStyle = '#ffffff';
+       ctx.fillRect(0, 0, canvas.width, canvas.height);
+       const r = window.__captureRegion;
+       ctx.fillStyle = '#ff0000';
+       ctx.fillRect(r.x * dpr, r.y * dpr, r.width * dpr, r.height * dpr);
+       return canvas.toDataURL('image/png');
+     };
+
      window.chrome = {
        runtime: {
          getURL: (p) => '${origin}/extension/' + p,
          sendMessage: async (msg) => {
            if (msg.type === 'getSettings') return { ok: true, result: window.__settings };
            if (msg.type === 'lookup') return { ok: true, result: await window.__zhLookup(msg.text) };
+           if (msg.type === 'capture') return { ok: true, result: { dataUrl: window.__fakeCapture() } };
            if (msg.type === 'audio') return { ok: true, result: await window.__zhAudio(msg.word, msg.pinyin) };
            if (msg.type === 'ankiInspect') {
              const r = await window.__zhAnkiInspect();
@@ -169,6 +199,9 @@ async function openPage(
            }
            return { ok: false, error: 'unhandled ' + msg.type };
          },
+         // The real listener is the service worker's route into the tab. Holding on to it lets a
+         // test start a snip the same way the toolbar button does.
+         onMessage: { addListener: (fn) => { window.__zhOnMessage = fn; } },
        },
        storage: { sync: { get: async () => window.__settings }, onChanged: { addListener() {} } },
      };`,
@@ -863,5 +896,439 @@ test('English definitions stay clean even if the worker reports a pending layer'
   await page.openPopup('#plain', 4);
 
   assert.equal((await page.evaluate(READ_WARNING)).hidden, true);
+  await page.close();
+});
+
+// --- snip overlay ------------------------------------------------------------
+//
+// The overlay reports a rectangle and nothing else, so these drive it with real pointer events
+// and assert on what comes back. `>>> .sheet` reaches into its shadow root the same way the
+// popup tests reach the buttons -- both roots are open.
+
+/** Start a selection the way the toolbar button does, and wait for the overlay to appear. */
+async function beginSnip(page) {
+  await page.evaluate(() => {
+    window.__snip = window.zhDic.startSnip();
+  });
+  await page.waitForSelector('>>> .sheet', { timeout: 5000 });
+}
+
+const snipResult = (page) => page.evaluate(() => window.__snip);
+
+// Probe for the overlay's own sheet rather than counting hosts: the popup and the result window
+// are hosts too, and both are in the DOM from startup whether or not they are showing.
+const NO_OVERLAY = () =>
+  ![...document.querySelectorAll('[data-zh-dic-host]')].some((host) => host.shadowRoot?.querySelector('.sheet'));
+
+const overlayGone = (page) => page.evaluate(NO_OVERLAY);
+
+test('dragging a box reports it in viewport coordinates and takes the overlay down', async () => {
+  const page = await openPage();
+  await beginSnip(page);
+
+  await page.mouse.move(120, 140);
+  await page.mouse.down();
+  await page.mouse.move(300, 260, { steps: 8 });
+  await page.mouse.up();
+
+  const region = await snipResult(page);
+  assert.deepEqual(
+    { x: region.x, y: region.y, width: region.width, height: region.height },
+    { x: 120, y: 140, width: 180, height: 120 },
+  );
+  // The capture this feeds is in device pixels, so the ratio has to come back with the box.
+  assert.equal(region.dpr, await page.evaluate(() => window.devicePixelRatio || 1));
+  assert.equal(await overlayGone(page), true, 'the overlay outlived the selection');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('dragging up and to the left gives the same box as dragging down and right', async () => {
+  // Nobody drags in one canonical direction, and a negative width would reach the capture as an
+  // empty crop rather than an error.
+  const page = await openPage();
+  await beginSnip(page);
+
+  await page.mouse.move(300, 260);
+  await page.mouse.down();
+  await page.mouse.move(120, 140, { steps: 8 });
+  await page.mouse.up();
+
+  const region = await snipResult(page);
+  assert.deepEqual(
+    { x: region.x, y: region.y, width: region.width, height: region.height },
+    { x: 120, y: 140, width: 180, height: 120 },
+  );
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('Escape abandons the selection', async () => {
+  const page = await openPage();
+  await beginSnip(page);
+
+  await page.mouse.move(120, 140);
+  await page.mouse.down();
+  await page.mouse.move(300, 260, { steps: 4 });
+  await page.keyboard.press('Escape');
+
+  assert.equal(await snipResult(page), null);
+  assert.equal(await overlayGone(page), true);
+
+  await page.mouse.up();
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a stray click is not a two-pixel selection', async () => {
+  // Aiming and then clicking without dragging is a mis-click. Handing OCR a sliver of nothing
+  // would answer with an empty result the user has no way to interpret.
+  const page = await openPage();
+  await beginSnip(page);
+
+  await page.mouse.move(200, 200);
+  await page.mouse.down();
+  await page.mouse.move(203, 202);
+  await page.mouse.up();
+
+  assert.equal(await snipResult(page), null);
+  assert.equal(await overlayGone(page), true);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a snip started from the toolbar holds lookups off until it ends', async () => {
+  const page = await openPage({ triggerKey: 'Shift' });
+  const at = await page.pointAt('#plain', 4);
+
+  await page.evaluate(() => window.__zhOnMessage({ type: 'snip' }));
+  await page.waitForSelector('>>> .sheet', { timeout: 5000 });
+
+  // The overlay is in front of everything, so a popup opened behind it would be invisible and
+  // impossible to dismiss.
+  await page.mouse.move(at.x, at.y);
+  await page.keyboard.down('Shift');
+  await page.mouse.move(at.x + 1, at.y);
+  await wait(250);
+  assert.equal(await page.popupVisible(), false, 'a lookup fired behind the overlay');
+  await page.keyboard.up('Shift');
+
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(NO_OVERLAY, { timeout: 5000 });
+
+  // And the suppression lifts again, rather than leaving the extension mute.
+  await page.openPopup('#plain', 4);
+  assert.equal(await page.popupVisible(), true);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+// --- snip result window ------------------------------------------------------
+//
+// The window is a sibling of the popup rather than a copy of it: both draw their entries with
+// EntryView and load popup.css, so these assert on the same class names the popup tests use.
+
+/** Read something out of the result window's shadow root. */
+const inResult = (page, fn) =>
+  page.evaluate((source) => {
+    const host = [...document.querySelectorAll('[data-zh-dic-host]')].find((h) => h.dataset.zhDicResult !== undefined);
+    // eslint-disable-next-line no-new-func
+    return new Function('root', `return (${source})(root)`)(host?.shadowRoot);
+  }, fn.toString());
+
+/** Drag the region the fake capture paints red, and wait for the window to show it. */
+async function snipTheRedBlock(page) {
+  await page.evaluate(() => window.__zhOnMessage({ type: 'snip' }));
+  await page.waitForSelector('>>> .sheet', { timeout: 5000 });
+
+  const r = await page.evaluate(() => window.__captureRegion);
+  await page.mouse.move(r.x, r.y);
+  await page.mouse.down();
+  await page.mouse.move(r.x + r.width, r.y + r.height, { steps: 8 });
+  await page.mouse.up();
+
+  await page.waitForSelector('>>> .shot-image[src]', { timeout: 5000 });
+  return r;
+}
+
+test('the window shows the region that was framed, not merely one of that size', async () => {
+  const page = await openPage();
+  const region = await snipTheRedBlock(page);
+
+  const shot = await inResult(page, async (root) => {
+    const image = root.querySelector('.shot-image');
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+
+    // Sample the four corners, inset a couple of pixels, rather than just the centre. A crop
+    // that is scaled or offset slightly still has a red centre -- it is the edges that pick up
+    // whatever was next to the selection, which is exactly the bug this guards.
+    const inset = 2;
+    const at = (x, y) => [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3);
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      corners: [
+        at(inset, inset),
+        at(canvas.width - 1 - inset, inset),
+        at(inset, canvas.height - 1 - inset),
+        at(canvas.width - 1 - inset, canvas.height - 1 - inset),
+      ],
+      caption: root.querySelector('.shot-size').textContent,
+    };
+  });
+
+  const dpr = await page.evaluate(() => window.devicePixelRatio || 1);
+  assert.deepEqual(
+    [shot.width, shot.height],
+    [Math.round(region.width * dpr), Math.round(region.height * dpr)],
+    'the crop is not the size that was dragged',
+  );
+  // Red is only where the fake capture painted it, so a crop that is offset or overscaled picks
+  // up white at an edge and fails here -- which is the failure that otherwise arrives as "the
+  // image has a bit of the next word in it", or later as OCR reading text nobody selected.
+  // Compared by channel rather than exactly: encoding to PNG and back drifts by a bit or two,
+  // and white is nowhere near this test either way.
+  for (const [i, corner] of shot.corners.entries()) {
+    const [r, g, b] = corner;
+    assert.ok(
+      r > 200 && g < 60 && b < 60,
+      `corner ${i} of the crop came from outside the selection (pixel ${corner.join(',')})`,
+    );
+  }
+  // The caption reports device pixels, matching the readout on the overlay.
+  assert.equal(shot.caption, `${shot.width} × ${shot.height}`);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('with no recogniser yet, the window still shows the capture and says so', async () => {
+  const page = await openPage();
+  await snipTheRedBlock(page);
+
+  const state = await inResult(page, (root) => ({
+    status: root.querySelector('.status').textContent,
+    statusShown: !root.querySelector('.status').hidden,
+    entries: root.querySelectorAll('.entry').length,
+    hasImage: !!root.querySelector('.shot-image').getAttribute('src'),
+  }));
+
+  assert.equal(state.hasImage, true);
+  assert.equal(state.statusShown, true);
+  assert.match(state.status, /recognition is still to come/);
+  assert.equal(state.entries, 0);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('recognised text is looked up and drawn as the hover popup draws it', async () => {
+  const page = await openPage();
+  // Standing in for OCR at exactly the seam it will fill.
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '中国菜';
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const shown = await inResult(page, (root) => ({
+    word: root.querySelector('.entry .word').textContent,
+    tones: root.querySelectorAll('.entry .pinyin .tone').length,
+    senses: root.querySelectorAll('.entry .senses li').length,
+    tabs: root.querySelectorAll('.tab').length,
+    statusShown: !root.querySelector('.status').hidden,
+    stillHasImage: !!root.querySelector('.shot-image').getAttribute('src'),
+  }));
+
+  assert.equal(shown.word, '中国菜');
+  assert.equal(shown.tones, 3, 'one toned syllable per character');
+  assert.ok(shown.senses > 0, 'the entry has no definitions');
+  // 中国菜 / 中国 / 中 -- the same longest-first tabs a hover would offer.
+  assert.ok(shown.tabs >= 2, 'the shorter candidates are missing');
+  // The capture stays on screen beside the reading; that is the whole point of the window.
+  assert.equal(shown.stillHasImage, true);
+  assert.equal(shown.statusShown, false, 'the status line outlived the lookup');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('Escape closes the result window and releases the capture', async () => {
+  const page = await openPage();
+  await snipTheRedBlock(page);
+
+  await page.keyboard.press('Escape');
+
+  const after = await inResult(page, (root) => ({
+    visible: root.host.hasAttribute('data-visible'),
+    // Several megabytes of base64 should not stay attached to a hidden node.
+    src: root.querySelector('.shot-image').getAttribute('src'),
+  }));
+  assert.equal(after.visible, false);
+  assert.equal(after.src, null);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the window is popup-width, and only its definitions scroll', async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '中国菜';
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const box = await inResult(page, (root) => {
+    const card = root.querySelector('.card');
+    const image = root.querySelector('.shot-image');
+    return {
+      cardWidth: card.clientWidth,
+      scrollWidth: card.scrollWidth,
+      overflowX: getComputedStyle(card).overflowX,
+      imageWidth: image.clientWidth,
+      panelOverflowY: getComputedStyle(root.querySelector('.panel')).overflowY,
+    };
+  });
+
+  // The regression this guards: popup.css scrolls the card with `overflow-y: auto`, which makes
+  // CSS compute overflow-x to `auto` too -- so anything a pixel wider than the content box, as
+  // the image's negative margins once were, showed a horizontal scrollbar.
+  assert.equal(box.overflowX, 'hidden');
+  assert.ok(
+    box.scrollWidth <= box.cardWidth,
+    `the card scrolls horizontally (${box.scrollWidth}px of content in ${box.cardWidth}px)`,
+  );
+  assert.ok(box.imageWidth <= box.cardWidth, 'the capture is wider than the window holding it');
+
+  // Same width as a hover popup, which is the whole point of sharing popup.css.
+  assert.ok(box.cardWidth <= 380, `the window is ${box.cardWidth}px, wider than the popup's 380px`);
+  // Scrolling belongs to the definitions, so the capture stays put above them.
+  assert.equal(box.panelOverflowY, 'auto');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the retry button closes the window and goes straight back to framing', async () => {
+  // A capture that read badly is reframed far more often than it is abandoned, so this is the
+  // path out of a bad snip -- without it the user has to close, find the toolbar and start over.
+  const page = await openPage();
+  await snipTheRedBlock(page);
+
+  await page.evaluate(() => {
+    const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+      (h) => h.dataset.zhDicResult !== undefined,
+    );
+    host.shadowRoot.querySelector('.shot-retry').click();
+  });
+
+  // The window goes, and the overlay comes straight back up.
+  await page.waitForSelector('>>> .sheet', { timeout: 5000 });
+  assert.equal(
+    await inResult(page, (root) => root.host.hasAttribute('data-visible')),
+    false,
+    'the window stayed open behind the new selection',
+  );
+
+  // And the second snip completes like the first, rather than being blocked by the first.
+  const region = await page.evaluate(() => window.__captureRegion);
+  await page.mouse.move(region.x, region.y);
+  await page.mouse.down();
+  await page.mouse.move(region.x + region.width, region.y + region.height, { steps: 6 });
+  await page.mouse.up();
+
+  await page.waitForSelector('>>> .shot-image[src]', { timeout: 5000 });
+  assert.equal(await inResult(page, (root) => root.host.hasAttribute('data-visible')), true);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the crop maps through the viewport it is given, not the document width', async () => {
+  // The bug this guards: the scale was measured against documentElement.clientWidth, which stops
+  // at the scrollbar, while captureVisibleTab includes it. The crop then ran ~1.7% large and slid
+  // right in proportion to distance from the left edge, pulling in the neighbouring word.
+  //
+  // Headless Chrome never lays out a space-taking scrollbar -- innerWidth and clientWidth are
+  // equal no matter what CSS is applied -- so the end-to-end path cannot show this. Calling
+  // cropRegion directly with a viewport narrower than the document is what reproduces it.
+  const page = await openPage();
+
+  const result = await page.evaluate(async () => {
+    const dpr = 2;
+    // A viewport 15px narrower than the document, the way a classic scrollbar leaves it.
+    const viewport = { width: document.documentElement.clientWidth - 15, height: 600 };
+    const region = { x: 600, y: 100, width: 180, height: 120 };
+
+    // A capture of exactly that viewport, red only where the region is.
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width * dpr;
+    canvas.height = viewport.height * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(region.x * dpr, region.y * dpr, region.width * dpr, region.height * dpr);
+
+    const shot = await window.zhDic.cropRegion(canvas.toDataURL('image/png'), region, viewport);
+
+    const image = new Image();
+    await new Promise((done) => {
+      image.onload = done;
+      image.src = shot.dataUrl;
+    });
+    const out = document.createElement('canvas');
+    out.width = image.naturalWidth;
+    out.height = image.naturalHeight;
+    const octx = out.getContext('2d');
+    octx.drawImage(image, 0, 0);
+    const at = (x, y) => [...octx.getImageData(x, y, 1, 1).data].slice(0, 3);
+    return {
+      size: [shot.width, shot.height],
+      expected: [region.width * dpr, region.height * dpr],
+      corners: [
+        at(2, 2),
+        at(out.width - 3, 2),
+        at(2, out.height - 3),
+        at(out.width - 3, out.height - 3),
+      ],
+    };
+  });
+
+  assert.deepEqual(result.size, result.expected, 'the crop is not the size that was selected');
+  for (const [i, corner] of result.corners.entries()) {
+    const [r, g, b] = corner;
+    assert.ok(
+      r > 200 && g < 60 && b < 60,
+      `corner ${i} came from outside the selection (pixel ${corner.join(',')}) -- the crop is ` +
+        'measuring against the wrong width',
+    );
+  }
+
+  page.assertNoErrors();
   await page.close();
 });

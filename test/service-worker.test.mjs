@@ -39,6 +39,9 @@ function mockChrome(stored = {}) {
       removeAll: (cb) => { calls.push({ name: 'menuRemoveAll', args: [] }); cb?.(); },
       onClicked: capture('menuClicked'),
     },
+    tabs: {
+      sendMessage: record('tabsSendMessage'),
+    },
     runtime: {
       getURL: (p) => `stub:${p}`,
       openOptionsPage: record('openOptions'),
@@ -101,24 +104,40 @@ test('every icon path the worker asks for exists on disk', () => {
   }
 });
 
-test('clicking the button flips enabled and repaints with the off artwork', async () => {
+test('clicking the button starts a snip and leaves the setting alone', async () => {
   assert.equal(mock.stored.enabled ?? DEFAULT_SETTINGS.enabled, true);
+  const writesBefore = mock.calls.filter((c) => c.name === 'storageSet').length;
 
-  await mock.listeners.actionClicked();
+  await mock.listeners.actionClicked({ id: 7 });
 
-  assert.deepEqual(mock.last('storageSet').args[0], { enabled: false });
+  const sent = mock.last('tabsSendMessage');
+  assert.ok(sent, 'the tab was never asked to snip');
+  assert.deepEqual(sent.args, [7, { type: 'snip' }]);
+  // Enabling is the menu's job now. A click that also toggled would make the button
+  // unusable as a snip trigger.
+  assert.equal(mock.calls.filter((c) => c.name === 'storageSet').length, writesBefore);
+});
 
-  const icon = mock.last('setIcon');
-  assert.equal(icon.args[0].path[16], '/icons/icon-off-16.png', 'off icon not applied');
-  assert.equal(icon.args[0].path[32], '/icons/icon-off-32.png');
+test('a click on a page with no content script is swallowed, not thrown', async () => {
+  // chrome:// URLs, the Web Store and the PDF viewer have no content script, so sendMessage
+  // rejects. There is nothing the user can do about it and nothing worth alarming them with.
+  mock.chrome.tabs.sendMessage = () => Promise.reject(new Error('Could not establish connection'));
+  await assert.doesNotReject(() => mock.listeners.actionClicked({ id: 7 }));
+});
+
+test('clicking while off turns the extension back on rather than snipping', async () => {
+  // The button must never be a dead end: with the extension off, a snip would lead nowhere.
+  await mock.chrome.storage.sync.set({ enabled: false });
+  assert.equal(mock.last('setIcon').args[0].path[16], '/icons/icon-off-16.png', 'off icon not applied');
   assert.match(mock.last('setTitle').args[0].title, /— off/);
   // The artwork carries the state; a badge would sit on top of it.
   assert.equal(mock.last('setBadgeText').args[0].text, '');
-});
 
-test('clicking again restores the awake icon', async () => {
-  await mock.listeners.actionClicked();
+  const snipsBefore = mock.calls.filter((c) => c.name === 'tabsSendMessage').length;
+  await mock.listeners.actionClicked({ id: 7 });
+
   assert.deepEqual(mock.last('storageSet').args[0], { enabled: true });
+  assert.equal(mock.calls.filter((c) => c.name === 'tabsSendMessage').length, snipsBefore);
   assert.equal(mock.last('setIcon').args[0].path[16], '/icons/icon-16.png');
 });
 

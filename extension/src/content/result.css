@@ -1,0 +1,119 @@
+/* The snip result window. popup.css is loaded ahead of this file into the same shadow root and
+   supplies the card, the tabs and every entry rule, so what's here is only what makes this
+   window a window: the captured image, its caption, the close button and the status line.
+
+   The width is deliberately not restated -- matching the hover popup is the point, so the
+   240-380px it sets is inherited as-is. */
+
+.card {
+  /* popup.css scrolls the card as a whole. Here the capture has to stay put while the
+     definitions beneath it scroll, so the card becomes a fixed frame and the panel does the
+     scrolling instead.
+
+     `overflow: hidden` is also what settles the horizontal scrollbar. `overflow-y: auto` on its
+     own computes overflow-x to `auto` as well -- CSS will not leave one axis visible while the
+     other scrolls -- so anything even a pixel wider than the content box produced one. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Everything above the definitions keeps its natural height; only the panel gives way. */
+.shot,
+.status,
+.tabs {
+  flex: none;
+}
+
+.panel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A flex child will not shrink below its content without this, so the card would grow past
+     its own max-height instead of the panel scrolling. */
+  min-height: 0;
+}
+
+.shot {
+  position: relative;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--zh-border);
+  background: var(--zh-hover);
+  /* The card is `overflow: hidden` with rounded corners, so the image is clipped to them
+     without this needing a radius of its own. */
+}
+
+.shot-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* A tall, narrow snip would otherwise leave no room for what was read out of it. Capped and
+     contained rather than cropped: seeing the whole capture is how the user tells a bad read
+     from a bad framing. */
+  max-height: 240px;
+  object-fit: contain;
+  object-position: center top;
+}
+
+.shot-size {
+  position: absolute;
+  left: 6px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #ffffff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.shot-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+}
+
+.shot-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.shot-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shot-button:hover {
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.shot-button:focus-visible {
+  outline: 2px solid var(--zh-accent);
+  outline-offset: 1px;
+}
+
+.status {
+  padding: 2px 12px 8px;
+  color: var(--zh-muted);
+  font-size: 0.85em;
+}
+
+.status[hidden] {
+  display: none;
+}

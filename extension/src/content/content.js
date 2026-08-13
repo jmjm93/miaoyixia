@@ -42,6 +42,7 @@
 
   let settings = null;
   let popup = null;
+  let result = null;
   let pointer = { x: 0, y: 0 };
   let previous = { x: 0, y: 0 }; // one sample back, for the direction test
   let anchor = null; // { x, y } of the word we last looked up
@@ -60,12 +61,14 @@
   // mousemove reopens the same word. Remember what was dismissed and stay quiet until the
   // pointer reaches something else.
   let suppressedKey = null;
+  /** True while the snip overlay is up, so the pointer is aiming rather than reading. */
+  let snipping = false;
 
   /** True when lookups are driven by the pointer alone, with no modifier held. */
   const hoverMode = () => settings.triggerKey === HOVER_ONLY;
 
   /** True when pointer movement should drive lookups right now. */
-  const sweeping = () => hoverMode() || triggerHeld;
+  const sweeping = () => !snipping && (hoverMode() || triggerHeld);
 
   // --- setup -------------------------------------------------------------------
 
@@ -86,6 +89,18 @@
     popup.onPlay = playPronunciation;
     popup.onAdd = addToAnki;
     popup.onInspect = inspectAnki;
+
+    // Built up front like the popup, so its stylesheets are loaded by the time the first snip
+    // finishes -- a window that appeared unstyled for a frame would be worse here, since it
+    // arrives with an image that changes its size.
+    result = new zh.ResultWindow(settings);
+    result.onPlay = playPronunciation;
+    result.onAdd = addToAnki;
+    result.onInspect = (candidate) => inspectAnkiInto(result, candidate);
+    // Straight back into framing. beginSnip hides the window itself, so the retry button and the
+    // toolbar button reach the same place from either state.
+    result.onRetry = beginSnip;
+
     addListeners();
   }
 
@@ -117,12 +132,20 @@
     // would sit there after the pointer exits the window.
     document.addEventListener('mouseleave', dismiss);
 
+    // Started from the toolbar button, which is where the user gesture that grants the capture
+    // its permissions comes from -- so the snip cannot begin anywhere else.
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.type === 'snip') beginSnip();
+      return false; // nothing to answer, and the sender isn't waiting
+    });
+
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync') return;
       for (const [key, { newValue }] of Object.entries(changes)) settings[key] = newValue;
       // Before updateSettings, which re-renders the hint bar in whatever language is active.
       if (changes.uiLanguage) setLanguage(settings.uiLanguage);
       popup.updateSettings(settings);
+      result.updateSettings(settings);
 
       // Switching trigger mid-session leaves a popup that belongs to the old mode, and a
       // held-key flag for a key we're no longer watching.
@@ -148,6 +171,10 @@
   }
 
   function onMouseMove(event) {
+    // The overlay covers the page, so nothing under the pointer is readable text anyway -- but
+    // it also sits in front of the popup, and a lookup firing behind it would be invisible.
+    if (snipping) return;
+
     previous = pointer;
     pointer = { x: event.clientX, y: event.clientY };
 
@@ -290,6 +317,13 @@
   }
 
   function onKeyDown(event) {
+    // Before the popup's own Escape: the result window is the thing in front, and it has no
+    // pointer-leaves-the-word gesture to dismiss it with.
+    if (result.visible && event.key === 'Escape') {
+      result.hide();
+      return;
+    }
+
     if (popup.visible && event.key === 'Escape') {
       suppressedKey = lastKey;
       dismiss();
@@ -461,6 +495,71 @@
     throw new Error(source === 'voice' ? 'no-voice' : 'no-audio');
   }
 
+  // --- snip --------------------------------------------------------------------
+
+  /**
+   * Let the user draw a box over some text, for OCR to read.
+   *
+   * Lookups stand down for the duration: the overlay is in front of everything, so a popup
+   * opened behind it would be both invisible and impossible to dismiss.
+   */
+  /** Resolves once a frame has actually been painted. */
+  const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  async function beginSnip() {
+    if (snipping) return;
+    dismiss();
+    result.hide();
+    snipping = true;
+    try {
+      const region = await zh.startSnip();
+      if (!region) return; // cancelled, or too small to have been meant
+
+      // The overlay is out of the DOM, but the compositor may not have caught up -- and
+      // captureVisibleTab photographs what is genuinely on screen. Without waiting for a frame
+      // painted without it, every capture comes back with the dimming over it.
+      await nextPaint();
+
+      const { dataUrl } = await send({ type: 'capture' });
+      // innerWidth/innerHeight, NOT documentElement.clientWidth/clientHeight. The client size
+      // stops at the scrollbar, while captureVisibleTab photographs the viewport including it.
+      // Measuring against the narrower number made the scale ~1.7% too large on any scrolling
+      // page, which both grew the crop and slid its origin right in proportion to how far across
+      // the page the selection sat -- so a carefully framed word arrived with the start of the
+      // next one attached.
+      const shot = await zh.cropRegion(dataUrl, region, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+      // On screen before recognition starts: the image is the slow part to produce and the
+      // fast part to judge, so there is no reason to make the user wait for the text.
+      result.show(shot, region);
+
+      const text = await zh.recognise(shot);
+      if (!text) {
+        result.setStatus(t('shotNoText'));
+        return;
+      }
+
+      const lookup = await send({
+        type: 'lookup',
+        text,
+        // The recognised line is its own context: there is no surrounding page text to take a
+        // sentence from, and a card made from this deserves to carry what was actually read.
+        sentence: text,
+        url: location.href,
+        title: document.title,
+      });
+      result.showCandidates(lookup.candidates);
+    } catch (error) {
+      console.error('[zh-dic] snip failed', error);
+      // A failure before the window opened has nowhere to be shown; the log is all there is.
+      if (result.visible) result.setStatus(t('shotFailed'));
+    } finally {
+      snipping = false;
+    }
+  }
+
   // --- Anki --------------------------------------------------------------------
 
   /**
@@ -468,18 +567,25 @@
    * buttons out. Fire-and-forget: the popup has already rendered, so a slow or absent Anki
    * costs nothing but a button that stays enabled until the answer lands.
    */
-  async function inspectAnki(candidate) {
+  async function inspectAnkiInto(surface, candidate, isStale = () => false) {
     if (!settings.ankiEnabled) return;
 
-    const shownFor = lastKey;
     try {
-      const result = await send({ type: 'ankiInspect', cards: candidate.cards });
-      // A newer lookup may have replaced the panel these buttons belong to.
-      if (lastKey === shownFor) popup.applyAnkiStates(result);
+      const states = await send({ type: 'ankiInspect', cards: candidate.cards });
+      if (!isStale()) surface.applyAnkiStates(states);
     } catch (error) {
-      if (lastKey === shownFor) popup.disableAnki(t('ankiAbsent'));
+      if (!isStale()) surface.disableAnki(t('ankiAbsent'));
       console.debug('[zh-dic] anki inspect failed', error);
     }
+  }
+
+  /**
+   * The popup's version. Unlike the result window it re-renders as the pointer moves, so an
+   * answer that arrives late may belong to a panel that has already been replaced.
+   */
+  function inspectAnki(candidate) {
+    const shownFor = lastKey;
+    return inspectAnkiInto(popup, candidate, () => lastKey !== shownFor);
   }
 
   /** Add one reading as a note. Errors propagate so the button can explain itself. */

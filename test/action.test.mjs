@@ -62,7 +62,8 @@ test('the tooltip says both the state and what a click will do', () => {
 
   const shift = actionTitle(on({ enabled: true, triggerKey: 'Control' }));
   assert.match(shift, /hold Ctrl/);
-  assert.match(shift, /Click to turn off/);
+  // While on, a click snips -- turning the extension off lives in the right-click menu.
+  assert.match(shift, /Click to capture text/);
 
   assert.match(actionTitle(on({ triggerKey: 'none' })), /hover, no key needed/);
   assert.ok(actionTitle(on()).startsWith(NAME));

@@ -72,7 +72,7 @@ before(async () => {
   await page.reload({ waitUntil: 'load' });
 
   // messages.js first -- popup.js reads globalThis.zhI18n as it loads.
-  for (const file of ['../lib/messages.js', 'text-at-point.js', 'popup.js']) {
+  for (const file of ['../lib/messages.js', 'text-at-point.js', 'entry-view.js', 'popup.js']) {
     await page.addScriptTag({ content: await readFile(join(root, 'extension/src/content', file), 'utf8') });
   }
 

@@ -44,7 +44,12 @@ export function namedModifier(settings) {
   return requiresModifier(settings) ? settings.triggerKey : settings.lastModifier || 'Shift';
 }
 
-/** Tooltip: says what the state is and what a click will do, since click toggles. */
+/**
+ * Tooltip: says what the state is and what a click will do.
+ *
+ * What a click does depends on the state -- it starts a snip while on, and turns the extension
+ * back on while off -- so the two cases are separate strings rather than one with a suffix.
+ */
 export function actionTitle(settings, isMac = false) {
   if (!settings.enabled) return t('actionOff', NAME);
   const how = requiresModifier(settings)

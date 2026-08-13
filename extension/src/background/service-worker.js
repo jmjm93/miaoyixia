@@ -61,6 +61,17 @@ async function handleLookup({ text, sentence, url, title }) {
   return { candidates, glossPending: lang !== 'en' && !translating };
 }
 
+/**
+ * A PNG of the visible tab, for the content script to crop the snipped region out of.
+ *
+ * captureVisibleTab isn't reachable from a content script, and it needs activeTab -- which the
+ * toolbar click that started the snip is what granted. So this can only ever answer for a snip
+ * the user actually asked for, and the screenshot never outlives the crop that follows it.
+ */
+async function handleCapture() {
+  return { dataUrl: await chrome.tabs.captureVisibleTab({ format: 'png' }) };
+}
+
 /** What the options page shows for the gloss layer: chosen, stored, and whether they agree. */
 async function handleGlossStatus() {
   const { glossLanguage } = await getSettings();
@@ -299,6 +310,7 @@ async function handleAnkiAdd({ card }) {
 
 const HANDLERS = {
   lookup: handleLookup,
+  capture: handleCapture,
   audio: handleAudio,
   ankiCollection: handleAnkiCollection,
   ankiFields: handleAnkiFields,
@@ -333,9 +345,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 // --- toolbar button ----------------------------------------------------------
 //
-// Left click toggles the extension; the right-click menu holds the rest. A button can have a
-// popup or an onClicked handler but not both, and one-click disabling is worth more here than
-// a panel would be.
+// Left click starts a snip; the right-click menu holds enabling, the trigger key and options. A
+// button can have a popup or an onClicked handler but not both, and the snip is the only thing
+// here that has to be *started* -- everything else is a setting, which a menu states better than
+// a button whose meaning changes with its own state.
+//
+// The obvious alternative, click to snip and hold to toggle, isn't available: chrome.action
+// reports a click and nothing else, with no press duration and no separate down/up, so an
+// extension cannot tell a long press from a short one.
 
 /**
  * Push current settings onto the icon, tooltip, badge and menu checkboxes.
@@ -399,9 +416,33 @@ function buildMenu() {
 chrome.runtime.onInstalled.addListener(() => getSettings().then(buildMenu, buildMenu));
 chrome.runtime.onStartup.addListener(refreshAction);
 
-chrome.action.onClicked.addListener(async () => {
+chrome.action.onClicked.addListener(async (tab) => {
   const { enabled } = await getSettings();
-  await chrome.storage.sync.set({ enabled: !enabled });
+
+  // While off, a snip would lead nowhere, so the click turns the extension back on instead --
+  // the button is never a dead end, and the tooltip says as much. Disabling lives in the menu.
+  if (!enabled) {
+    await chrome.storage.sync.set({ enabled: true });
+    return;
+  }
+  if (!tab?.id) return;
+
+  // Two very different things land here. Some pages genuinely have no content script and never
+  // will -- the Web Store, chrome:// URLs, the PDF viewer -- and nothing can be done about those.
+  // But a tab that was already open when the extension was reloaded or updated has no live
+  // content script either, because Chrome does not inject into existing tabs, and *that* one is
+  // fixed by reloading the page. Warn rather than debug: console.debug is filtered out at
+  // DevTools' default log level, so the only symptom was a button that did nothing.
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: 'snip' });
+  } catch (error) {
+    console.warn(
+      '[zh-dic] could not start a snip in this tab. If the page was open before the extension ' +
+        'was last reloaded or updated, reload the page. Otherwise it is a page extensions cannot ' +
+        'run on.',
+      error,
+    );
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info) => {

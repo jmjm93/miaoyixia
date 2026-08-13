@@ -207,9 +207,19 @@
       noAudio: 'No Chinese voice installed and no recording found',
       playbackFailed: 'Could not play audio: $1',
 
+      // --- snip overlay and its result window ---
+      snipHint: 'Drag over the text · Esc to cancel',
+      close: 'Close',
+      snipAgain: 'Snip again — reframe and retry',
+      shotAlt: 'The text you captured',
+      shotReading: 'Reading…',
+      shotNoText: 'No text read yet — recognition is still to come',
+      shotNoMatch: 'Nothing in the dictionary matches what was read',
+      shotFailed: 'Could not read this capture',
+
       // --- toolbar button and its menu ---
       actionOff: '$1 — off\nClick to turn on',
-      actionOn: '$1 — on, $2\nClick to turn off',
+      actionOn: '$1 — on, $2\nClick to capture text from an image',
       actionHoldKey: 'hold $1',
       actionHover: 'hover, no key needed',
       menuRequireKey: 'Require $1 to look up',
@@ -405,9 +415,19 @@
       noAudio: 'No hay ninguna voz en chino instalada ni se encontró grabación',
       playbackFailed: 'No se pudo reproducir el audio: $1',
 
+      // --- snip overlay and its result window ---
+      snipHint: 'Arrastra sobre el texto · Esc para cancelar',
+      close: 'Cerrar',
+      snipAgain: 'Capturar de nuevo — reencuadra y reintenta',
+      shotAlt: 'El texto que has capturado',
+      shotReading: 'Leyendo…',
+      shotNoText: 'Aún no se ha leído texto — falta el reconocimiento',
+      shotNoMatch: 'Nada en el diccionario coincide con lo leído',
+      shotFailed: 'No se pudo leer esta captura',
+
       // --- toolbar button and its menu ---
       actionOff: '$1 — desactivado\nClic para activar',
-      actionOn: '$1 — activado, $2\nClic para desactivar',
+      actionOn: '$1 — activado, $2\nClic para capturar texto de una imagen',
       actionHoldKey: 'mantén $1',
       actionHover: 'pasando el ratón, sin tecla',
       menuRequireKey: 'Requerir $1 para buscar',
