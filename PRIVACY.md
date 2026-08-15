@@ -1,12 +1,14 @@
 # Privacy Policy — 瞄一下 (miaoyixia)
 
-**Last updated: 10 August 2026**
+**Last updated: 15 August 2026**
 
 **Short version: this extension collects nothing.** There is no analytics, no telemetry, no
 advertising, and no account. The page you are reading is never sent anywhere, and no record of
-what you look up is kept. The one thing that ever leaves your device is a single word, when you
-ask to hear it or to save it to a flashcard, in order to fetch its pronunciation — described in
-full below, and switchable off.
+what you look up is kept. Two things can leave your device, both described in full below and both
+switchable off: a single word, when you ask to hear it or save it to a flashcard, to fetch its
+pronunciation; and — only if you turn it on, which it is not by default — a sentence you have
+captured from an image, to translate it. Reading text out of an image happens entirely on your
+machine, and no picture of your screen is ever transmitted.
 
 ## What happens on your device
 
@@ -14,6 +16,24 @@ When you hover a Chinese word, the extension reads a short run of text around th
 work out which word you mean, and looks it up in a dictionary **bundled inside the extension
 itself** — a copy of [CC-CEDICT](https://cc-cedict.org/) with 124,766 entries. This lookup is
 entirely local. The page you are reading is never transmitted, stored, or logged.
+
+## Reading text from images
+
+Clicking the toolbar button lets you drag a box over part of the page. To do that, the extension
+takes a screenshot of the tab you are looking at, crops it to the box you drew, and reads the
+Chinese in it. **All of this happens on your machine.** The recogniser and its language models
+are bundled inside the extension — about 13 MB of them — and run in a hidden page belonging to
+the extension, not on any server.
+
+**No image ever leaves your device.** The screenshot exists only in memory, is cropped
+immediately to the region you selected, and is discarded when the result window closes. It is
+never saved to disk, uploaded, or logged. The text that comes out of it is then looked up in the
+same bundled dictionary a hover uses.
+
+The screenshot is taken at the moment you click the toolbar button, which is what `activeTab`
+permits. That permission is granted by the click itself and lapses afterwards; it does not let
+the extension look at your tabs at any other time, and no screenshot is ever taken without you
+starting one.
 
 ## What is stored
 
@@ -30,7 +50,7 @@ not remotely.
 
 ## What leaves your device
 
-Four things, and all of them only when you explicitly click something:
+Five things, and none of them happen unless you ask for them:
 
 **1. Pronunciation recordings.** If you click the speaker button on an entry, or add a card with
 an audio field, the extension asks
@@ -87,6 +107,20 @@ running in your own copy of Anki, on your own machine. This traffic never leaves
 Access to that address is an *optional* permission, requested only if you switch the feature on;
 if you never do, it is never granted and never used.
 
+**5. A sentence you captured, for translation — off by default.** If you switch *Translate the
+sentence* on, the text read out of an image is sent to
+[Google Translate](https://translate.googleapis.com/) to be translated into your definitions
+language. Only that line is sent: not the picture, not the page, not its address, and nothing
+identifying you. [Google's privacy policy](https://policies.google.com/privacy) applies to the
+request.
+
+This is the only feature that sends anything you have *read* to a third party, so it is off
+unless you choose otherwise, and the permission to reach that address is *optional* — until you
+turn the setting on it is never requested, and the browser itself blocks the request rather than
+this extension merely promising not to make it. Turning the setting back off stops it at once.
+Hovering, dictionary lookups and reading text from images are all unaffected either way: none of
+them ever touch the network.
+
 ## What is never collected
 
 - Analytics, usage statistics, crash reports or telemetry of any kind
@@ -112,13 +146,19 @@ as they would from anyone visiting them. If you would rather no word ever left y
 | --- | --- |
 | `storage` | Save the settings above |
 | `contextMenus` | The right-click menu on the extension's own toolbar button |
+| `activeTab` | Take a screenshot of the tab you are looking at, at the moment you click the toolbar button, so that text in an image can be read. It grants nothing at any other time, and the screenshot never leaves your device. |
+| `offscreen` | Run the bundled text recogniser in a hidden page of the extension's own. The background worker Chrome gives extensions is shut down too often to hold a recogniser this size. |
 | Access to all sites | Chinese text can appear anywhere, so the dictionary must be able to read the word under your pointer wherever you are reading. Used locally only. |
 | `commons.wikimedia.org`, `upload.wikimedia.org` | Download a human pronunciation recording of a word you asked to hear or to save |
 | `translate.google.com`, `fanyi.baidu.com` | Fetch a synthesised pronunciation of that word when no recording exists. Only the one you select as *Synthesised fallback* is ever contacted, and neither is if you set it to "None". |
 | `127.0.0.1:8765` (optional) | Send a flashcard to your own local Anki |
 | `raw.githubusercontent.com` (optional) | Download the Spanish definitions, once, if you ask for them |
+| `translate.googleapis.com` (optional) | Translate a sentence captured from an image, only if you turn *Translate the sentence* on |
 
-The extension requests no access to your tabs, browsing history, cookies, or downloads.
+The extension requests no access to your browsing history, bookmarks, cookies or downloads, and
+cannot read tabs you are not looking at. Its only access to a tab is `activeTab`, which Chrome
+grants for the current tab at the moment you click the toolbar button and which is what allows
+the screenshot described above.
 
 ## Children
 

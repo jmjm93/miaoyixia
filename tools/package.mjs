@@ -116,6 +116,28 @@ if (!names.includes('manifest.json')) problems.push('manifest.json is not at the
 if (!names.includes('data/meta.json')) {
   problems.push('extension/data/ is missing — run `npm run build` first, it is gitignored');
 }
+// The recogniser is gitignored like the dictionary, and unlike the dictionary nothing else here
+// would notice it missing: its files are fetched at runtime with chrome.runtime.getURL from the
+// offscreen document, so they are not referenced by the manifest and the check further down
+// cannot see them. A ZIP built from a fresh clone would install cleanly, hover perfectly, and
+// fail on every snip -- the worst kind of broken, because it looks fine.
+const OCR_REQUIRED = [
+  'data/ocr/tesseract.esm.min.js',
+  'data/ocr/worker.min.js',
+  'data/ocr/tesseract-core-simd-lstm.wasm.js',
+  'data/ocr/chi_sim.traineddata',
+  'data/ocr/chi_tra.traineddata',
+  'data/ocr/chi_sim_vert.traineddata',
+  'data/ocr/chi_tra_vert.traineddata',
+];
+const missingOcr = OCR_REQUIRED.filter((path) => !names.includes(path));
+if (missingOcr.length) {
+  problems.push(
+    'the text recogniser is incomplete — run `npm run fetch-ocr`, it is gitignored ' +
+      `(missing: ${missingOcr.map((path) => path.replace('data/ocr/', '')).join(', ')})`,
+  );
+}
+
 for (const name of names) {
   if (name.includes('\\')) problems.push(`entry name contains a backslash: ${name}`);
 }
