@@ -168,3 +168,62 @@ test('the options item opens the options page', async () => {
   await mock.listeners.menuClicked({ menuItemId: 'open-options' });
   assert.ok(mock.last('openOptions'), 'openOptionsPage was not called');
 });
+
+// --- translation -------------------------------------------------------------
+//
+// The only path that sends anything the user read to a third party, so what matters here is not
+// that it works but that it stays quiet unless asked.
+
+/** Run a message through the worker's real listener and return its reply. */
+const ask = (message) =>
+  new Promise((resolve) => {
+    mock.listeners.message(message, {}, resolve);
+  });
+
+/** Record whether anything reached the network while `run` was in flight. */
+async function watchingFetch(run) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (...args) => {
+    calls.push(String(args[0]));
+    return real(...args);
+  };
+  try {
+    return { result: await run(), calls };
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test('with translation off, nothing is sent and no request is made', async () => {
+  assert.equal(mock.stored.translation ?? DEFAULT_SETTINGS.translation, 'off');
+
+  const { result, calls } = await watchingFetch(() => ask({ type: 'translate', text: '你好世界' }));
+
+  assert.deepEqual(result, { ok: true, result: { text: null } });
+  assert.deepEqual(
+    calls.filter((url) => url.includes('translate')),
+    [],
+    'a translation request was made while the setting was off',
+  );
+});
+
+test('with translation on but no permission, it refuses rather than reaching the network', async () => {
+  // Belt and braces. Chrome would block the request anyway without the optional permission; this
+  // pins that the code does not even try, so the failure is a clear message rather than a CORS
+  // error nobody can interpret.
+  mock.chrome.permissions = { contains: async () => false };
+  await mock.chrome.storage.sync.set({ translation: 'google' });
+
+  const { result, calls } = await watchingFetch(() => ask({ type: 'translate', text: '你好世界' }));
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /permission/i);
+  assert.deepEqual(
+    calls.filter((url) => url.includes('translate')),
+    [],
+    'a request was attempted without permission',
+  );
+
+  await mock.chrome.storage.sync.set({ translation: 'off' });
+});

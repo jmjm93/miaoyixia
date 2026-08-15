@@ -22,7 +22,28 @@
       "Bash(ps -W)",
       "Bash(break)",
       "Bash(node --test test/audio.test.mjs)",
-      "Bash(node --test test/tts.test.mjs)"
+      "Bash(node --test test/tts.test.mjs)",
+      "Bash(cp extension/src/content/result.js /tmp/result.bak)",
+      "Bash(sed -i 's|this.#host.style.top = `${Math.max\\(EDGE, Math.min\\(top, window.innerHeight - EDGE - shown\\)\\)}px`;|this.#host.style.top = `${Math.max\\(EDGE, top\\)}px`;|' extension/src/content/result.js)",
+      "Bash(npx node *)",
+      "Bash(cp /tmp/result.bak extension/src/content/result.js)",
+      "Bash(python -)",
+      "Bash(sed -i 's/with每 glyph/with each glyph/' tools/bench-ocr.mjs)",
+      "Bash(node --check tools/bench-ocr.mjs)",
+      "Bash(cd /d/code/zh-dic-anki *)",
+      "Bash(cp extension/src/content/content.js /tmp/content.bak)",
+      "Bash(cp /tmp/content.bak extension/src/content/content.js)",
+      "Bash(npm test *)",
+      "Bash(node --check extension/src/content/content.js)",
+      "Bash(cp extension/src/content/result.js /tmp/r.bak)",
+      "Bash(cp extension/src/content/content.js /tmp/c.bak)",
+      "Bash(cp /tmp/r.bak extension/src/content/result.js)",
+      "Bash(cp /tmp/c.bak extension/src/content/content.js)"
+    ],
+    "additionalDirectories": [
+      "\\tmp",
+      "D:\\code\\zh-dic-anki\\extension\\src\\options",
+      "d:\\code\\zh-dic-anki\\extension\\src\\background"
     ]
   }
 }

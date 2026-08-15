@@ -4,7 +4,9 @@
 // and gets back render-ready cards. That keeps one copy of the data per browser rather
 // than one per tab, and keeps the content script small enough to inject everywhere.
 
-import { loadMeta, lookupCandidates } from '../lib/dict-store.js';
+import { loadMeta, lookupCandidates, matchesByPosition } from '../lib/dict-store.js';
+import { segment } from '../lib/segment.js';
+import { ocrModel } from '../lib/ocr.js';
 import { applyScript, buildCard } from '../lib/card.js';
 import { clearGlosses, glossFor, glossInfo, glossReady, resetGlossReady } from '../lib/gloss-store.js';
 import { exportAudioPlan, getSettings } from '../lib/settings.js';
@@ -34,19 +36,9 @@ const ttsCache = new Map();
  * Turn the forward-text the content script read at the cursor into tabs, one per
  * candidate length, longest first.
  */
-async function handleLookup({ text, sentence, url, title }) {
-  const [settings, matches] = await Promise.all([getSettings(), lookupCandidates(text ?? '')]);
-  const context = { sentence, url, title };
-
-  // English ships in the package, so it is never pending and never needs a lookup. Any other
-  // language is downloaded, and until it is on disk the lookup quietly answers in English --
-  // the popup says so, but a missing download must never mean a missing definition.
-  const lang = settings.glossLanguage;
-  const translating = lang !== 'en' && (await glossReady(lang));
-
-  // Every candidate for one hover starts with the same character, so all of these resolve
-  // against a single memoised shard. The awaits are cheap after the first.
-  const candidates = await Promise.all(
+/** Turn dictionary matches into render-ready tabs. Shared by hovering and by reading a snip. */
+function buildCandidates(matches, context, lang, translating) {
+  return Promise.all(
     matches.map(async ({ headword, length, entries }) => ({
       headword,
       length,
@@ -57,8 +49,67 @@ async function handleLookup({ text, sentence, url, title }) {
       ),
     })),
   );
+}
 
-  return { candidates, glossPending: lang !== 'en' && !translating };
+/**
+ * Whether definitions can be answered in the chosen language right now.
+ *
+ * English ships in the package, so it is never pending and never needs a lookup. Any other
+ * language is downloaded, and until it is on disk the lookup quietly answers in English -- the
+ * popup says so, but a missing download must never mean a missing definition.
+ */
+async function glossState(settings) {
+  const lang = settings.glossLanguage;
+  const translating = lang !== 'en' && (await glossReady(lang));
+  return { lang, translating, glossPending: lang !== 'en' && !translating };
+}
+
+async function handleLookup({ text, sentence, url, title }) {
+  const [settings, matches] = await Promise.all([getSettings(), lookupCandidates(text ?? '')]);
+  const { lang, translating, glossPending } = await glossState(settings);
+
+  // Every candidate for one hover starts with the same character, so all of these resolve
+  // against a single memoised shard. The awaits are cheap after the first.
+  const candidates = await buildCandidates(matches, { sentence, url, title }, lang, translating);
+  return { candidates, glossPending };
+}
+
+/**
+ * Read a whole recognised line: split it into words, and look each one up.
+ *
+ * Unlike a hover there is no cursor saying where a word begins, so the line has to be segmented
+ * first -- see segment.js for why that is a shortest-path problem rather than greedy matching.
+ *
+ * Each token carries *every* match at its starting position, not just the one segmentation
+ * chose. That is what makes a wrong split recoverable: the window shows those as the same
+ * candidate tabs a hover offers, so picking a different length is one click rather than a
+ * re-snip. It costs nothing extra either, since the matches were already computed to segment.
+ *
+ * The whole line travels as the sentence for every card, so a note made from one word still
+ * records the context it was read in.
+ */
+async function handleRead({ text, url, title }) {
+  const line = text ?? '';
+  const chars = [...line];
+  const [settings, matchesAt] = await Promise.all([getSettings(), matchesByPosition(line)]);
+  const { lang, translating, glossPending } = await glossState(settings);
+
+  const context = { sentence: line, url, title };
+  const spans = segment(
+    chars.length,
+    matchesAt.map((matches) => matches.map((match) => match.length)),
+  );
+
+  const tokens = await Promise.all(
+    spans.map(async ({ start, length }) => ({
+      text: chars.slice(start, start + length).join(''),
+      start,
+      length,
+      candidates: await buildCandidates(matchesAt[start] ?? [], context, lang, translating),
+    })),
+  );
+
+  return { tokens, glossPending };
 }
 
 /**
@@ -70,6 +121,132 @@ async function handleLookup({ text, sentence, url, title }) {
  */
 async function handleCapture() {
   return { dataUrl: await chrome.tabs.captureVisibleTab({ format: 'png' }) };
+}
+
+/**
+ * The recogniser lives in an offscreen document, not here.
+ *
+ * This worker is killed after roughly thirty seconds idle, and the OCR engine is ~6 MB of WASM
+ * that takes a second or two to parse. Rebuilding it per snip would be most of the wait, so it
+ * is held somewhere that outlives us. `creating` is kept because two snips in quick succession
+ * would otherwise both find no document and both try to create one, and the second throws.
+ */
+let creating = null;
+
+async function ensureRecogniser() {
+  if (!(await chrome.offscreen.hasDocument())) {
+    creating ??= chrome.offscreen
+      .createDocument({
+        url: 'src/offscreen/offscreen.html',
+        reasons: ['WORKERS'],
+        justification: 'Runs the offline text recogniser used to read Chinese out of a screenshot.',
+      })
+      .finally(() => {
+        creating = null;
+      });
+    await creating;
+  }
+  await waitForRecogniser();
+}
+
+/**
+ * Wait until the offscreen document can actually take work.
+ *
+ * createDocument resolves once the document *exists*, which is well before its script has run --
+ * offscreen.js is a module, so it is deferred. Sending straight after creating it loses that race
+ * and fails as "Receiving end does not exist", which reads exactly like a missing document rather
+ * than a slow one. Polling a ping costs a few milliseconds and removes the whole class of bug.
+ *
+ * hasDocument() being true is not enough on its own either: this worker restarts constantly, and
+ * a fresh one has no idea how far along an existing document is.
+ */
+async function waitForRecogniser(attempts = 60, gap = 25) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const pong = await chrome.runtime.sendMessage({ type: 'ocr:ping' });
+      if (pong?.ok) return;
+    } catch {
+      // Nothing listening yet, which is the case this loop exists for.
+    }
+    await new Promise((resolve) => setTimeout(resolve, gap));
+  }
+  // Distinguishable from the races above: at this point the document is genuinely not coming up,
+  // which almost always means its script threw. chrome://extensions -> Inspect views has it.
+  throw new Error('the recogniser did not start; check the offscreen document for errors');
+}
+
+/** Read Chinese out of a snipped image. The content script sends the crop, not the whole tab. */
+async function handleRecognise({ dataUrl }) {
+  // Read fresh every time rather than caching: the result window can change the script and
+  // direction and ask to be read again, without a new snip.
+  const settings = await getSettings();
+  await ensureRecogniser();
+  const response = await chrome.runtime.sendMessage({
+    type: 'ocr:run',
+    dataUrl,
+    model: ocrModel(settings),
+  });
+  if (!response?.ok) throw new Error(response?.error ?? 'the recogniser did not answer');
+  return response.result;
+}
+
+/**
+ * The tab's page-zoom factor, so the result window can cancel it out.
+ *
+ * Only reachable from here: a content script has no way to read page zoom. devicePixelRatio does
+ * move with it, but its resting value depends on the display, so the two cannot be separated from
+ * inside the page.
+ *
+ * Answers 1 rather than throwing when it cannot be read. Zoom compensation is a nicety, and a
+ * window at the wrong scale beats no window at all.
+ */
+async function handleZoom(_message, sender) {
+  try {
+    const factor = await chrome.tabs.getZoom(sender?.tab?.id);
+    return { factor: factor > 0 ? factor : 1 };
+  } catch (error) {
+    console.debug('[zh-dic] could not read the tab zoom', error);
+    return { factor: 1 };
+  }
+}
+
+export const TRANSLATE_ORIGINS = ['https://translate.googleapis.com/*'];
+
+/**
+ * Machine-translate a snipped line.
+ *
+ * The only thing in this extension that sends anything a user read to a third party, so it is
+ * off unless asked for, and the host permission is optional -- if it has not been granted this
+ * cannot reach the network even if the setting somehow says otherwise.
+ *
+ * Answers `{ text: null }` rather than throwing when it is simply switched off, since the
+ * content script calls this on every reading and "not enabled" is not an error.
+ */
+async function handleTranslate({ text }) {
+  const settings = await getSettings();
+  if (settings.translation !== 'google' || !text) return { text: null };
+
+  if (!(await chrome.permissions.contains({ origins: TRANSLATE_ORIGINS }))) {
+    throw new Error('translation is enabled but has no permission to reach the network');
+  }
+
+  // The public endpoint the Google Translate web page itself uses. No key, no account -- and no
+  // support either, so a failure here is reported and dropped rather than retried.
+  const url =
+    'https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN' +
+    `&tl=${encodeURIComponent(settings.glossLanguage || 'en')}&dt=t&q=${encodeURIComponent(text)}`;
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`translation failed: ${response.status}`);
+
+  // Deeply nested arrays: [0] holds the segments, each of which leads with its translation.
+  const data = await response.json();
+  const translated = (Array.isArray(data?.[0]) ? data[0] : [])
+    .map((segment) => segment?.[0] ?? '')
+    .join('')
+    .trim();
+
+  return { text: translated || null };
 }
 
 /** What the options page shows for the gloss layer: chosen, stored, and whether they agree. */
@@ -310,7 +487,11 @@ async function handleAnkiAdd({ card }) {
 
 const HANDLERS = {
   lookup: handleLookup,
+  read: handleRead,
   capture: handleCapture,
+  recognise: handleRecognise,
+  translate: handleTranslate,
+  zoom: handleZoom,
   audio: handleAudio,
   ankiCollection: handleAnkiCollection,
   ankiFields: handleAnkiFields,
@@ -323,7 +504,7 @@ const HANDLERS = {
   getMeta: loadMeta,
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = HANDLERS[message?.type];
   if (!handler) return false;
 
@@ -332,7 +513,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // either case kills the message port and surfaces at the caller as a bare
   // "handler(...).then is not a function" with no clue which message caused it.
   Promise.resolve()
-    .then(() => handler(message))
+    .then(() => handler(message, sender))
     .then(
       (result) => sendResponse({ ok: true, result }),
       (error) => {

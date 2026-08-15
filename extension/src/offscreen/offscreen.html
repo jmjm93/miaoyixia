@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>瞄一下 recogniser</title>
+  </head>
+  <body>
+    <!-- Never seen by anyone. This document exists only to give the recogniser a place to live
+         that outlives the service worker: an MV3 worker is killed after ~30s idle, and reloading
+         a 6 MB engine on every snip would cost more than the recognition does. -->
+    <script type="module" src="offscreen.js"></script>
+  </body>
+</html>

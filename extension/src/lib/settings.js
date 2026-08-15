@@ -52,6 +52,39 @@ export const DEFAULT_SETTINGS = {
   /** Which script to show first when an entry has both. */
   script: 'simplified',
   /**
+   * Which script the *images* are in. Separate from `script`, which is only about display:
+   * someone may well read a traditional manhua and prefer simplified on their cards.
+   *
+   * Chosen rather than detected, deliberately. Simplified and traditional share a great many
+   * characters, so the wrong model does not produce obvious nonsense -- it produces some other
+   * real character, confidently. Guessing here would trade an occasional visible mistake for a
+   * frequent invisible one.
+   *
+   * The dictionary needs no help either way: build-dict.mjs indexes both forms, so a traditional
+   * reading looks up exactly as a simplified one does.
+   */
+  ocrScript: 'simplified',
+  /**
+   * Which way the text in the images runs. Manhua is often set vertically, in both scripts.
+   *
+   * Also chosen rather than detected. Measured on a vertical sample, the horizontal model
+   * returned 76% confidence while quietly dropping three characters of seven -- so confidence
+   * cannot tell the two apart, and a threshold would accept the wrong answer. The recogniser
+   * additionally needs a different page-segmentation mode per direction; see offscreen.js.
+   */
+  ocrOrientation: 'horizontal',
+  /**
+   * Machine translation of a snipped line, or 'off'.
+   *
+   * Off by default and gated behind an *optional* host permission, not a required one, so an
+   * extension whose owner never turns this on physically cannot reach the translation host --
+   * Chrome enforces that, rather than this code promising it.
+   *
+   * Only the recognised line is ever sent, and only from the snip path. Hovering stays offline,
+   * as does every dictionary lookup; the whole dictionary is on disk.
+   */
+  translation: 'off',
+  /**
    * Where pronunciation audio comes from.
    *   'auto'      OS Chinese voice, falling back to a Wikimedia Commons recording
    *   'voice'     OS voice only -- offline, but needs a Chinese voice installed

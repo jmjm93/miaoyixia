@@ -19,6 +19,7 @@ import {
 import { LANGUAGES, language, t, tn } from '../lib/i18n.js';
 
 const ANKI_ORIGINS = ['http://127.0.0.1:8765/*', 'http://localhost:8765/*'];
+const TRANSLATE_ORIGINS = ['https://translate.googleapis.com/*'];
 
 /** Controls whose value is a number rather than a string. */
 const NUMERIC = new Set(['fontSize', 'maxSenses', 'hoverDelay', 'speechRate']);
@@ -158,7 +159,32 @@ function syncConditionalRows() {
   const showVoiceInfo = audio !== 'off';
   document.getElementById('voiceStatus').hidden = !showVoiceInfo;
   document.getElementById('voiceHelp').hidden = !showVoiceInfo || hasChineseVoice;
+
+  // Nothing to grant while translation is off, and showing the row then would invite someone to
+  // hand over a permission they have no use for.
+  document.getElementById('translationPermissionRow').hidden =
+    document.getElementById('translation').value === 'off';
+  refreshTranslatePermission();
 }
+
+/**
+ * Say whether translation can actually reach the network.
+ *
+ * The setting and the permission are separate on purpose: turning the setting on does not grant
+ * anything, and revoking the permission in Chrome's own UI leaves the setting alone. Showing both
+ * means "enabled but silently doing nothing" is visible rather than mysterious.
+ */
+async function refreshTranslatePermission() {
+  const granted = await chrome.permissions.contains({ origins: TRANSLATE_ORIGINS });
+  document.getElementById('translationPermissionState').textContent = t(granted ? 'granted' : 'notGranted');
+  document.getElementById('translationGrant').hidden = granted;
+}
+
+document.getElementById('translationGrant').addEventListener('click', async () => {
+  // Must be called from a user gesture, which is why this lives on a button.
+  await chrome.permissions.request({ origins: TRANSLATE_ORIGINS });
+  refreshTranslatePermission();
+});
 
 /**
  * Offer the voice-dependent choices only when something can actually serve them.

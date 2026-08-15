@@ -55,6 +55,42 @@ async function loadShard(index) {
  * @param {string} text
  * @returns {Promise<Array<{headword: string, length: number, entries: string[][]}>>}
  */
+/**
+ * Every dictionary match beginning at every position of `text`, each list longest first.
+ *
+ * The hover path deliberately touches one shard, because all of its candidates share a first
+ * character. A recognised line has no such luxury: segmenting it needs to know what words start
+ * at each position, so it needs the shard for each distinct character in the line. They are
+ * loaded together rather than one after another -- a dozen sequential fetches is a visible pause,
+ * and loadShard memoises, so a line that repeats a character still only fetches once.
+ *
+ * @param {string} text
+ * @returns {Promise<Array<Array<{headword: string, length: number, entries: string[][]}>>>}
+ *   Indexed by character position. Positions with no matches hold an empty array.
+ */
+export async function matchesByPosition(text) {
+  const chars = [...text];
+  if (!chars.length) return [];
+
+  const { maxWordLength = 8 } = await loadMeta();
+
+  const indices = [...new Set(chars.map(shardFor))];
+  const loaded = await Promise.all(indices.map(loadShard));
+  const shards = new Map(indices.map((index, i) => [index, loaded[i]]));
+
+  return chars.map((char, start) => {
+    const shard = shards.get(shardFor(char));
+    const matches = [];
+    const limit = Math.min(chars.length - start, maxWordLength);
+    for (let length = limit; length >= 1; length--) {
+      const headword = chars.slice(start, start + length).join('');
+      const entries = shard[headword];
+      if (entries) matches.push({ headword, length, entries });
+    }
+    return matches;
+  });
+}
+
 export async function lookupCandidates(text) {
   const chars = [...text];
   if (!chars.length) return [];

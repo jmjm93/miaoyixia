@@ -45,6 +45,58 @@ The row is hidden unless the keyless trigger is selected.
 **Show script** decides whether an entry leads with its simplified or traditional form. The
 other one follows after a middot, and only when the two actually differ.
 
+### Text in images
+
+Clicking the toolbar button starts a snip: drag a box over some text in an image and it is read,
+split into words, and looked up. These two settings tell the recogniser what to expect, and are
+also reachable from the gear on the result window — changing them there re-reads the capture
+already on screen rather than making you frame it again.
+
+**Script in images** is which script the text itself is written in, separate from **Show script**,
+which is only about display: you may well read a traditional manhua and prefer simplified on your
+cards. Either way the dictionary copes, because both forms are indexed.
+
+**Text direction** is horizontal or vertical. Manhua is frequently set vertically in both scripts.
+
+Neither is detected automatically, and that is deliberate. Simplified and traditional share too
+many characters for a wrong guess to look wrong — it produces a different real character, not
+nonsense. Direction is no safer: reading vertical text with the horizontal model returned 76%
+confidence while quietly dropping three characters of seven, so no confidence threshold could
+have caught it. A wrong setting is visible and one click from fixed; a wrong guess would not be.
+
+**What it reads well, and what it doesn't.** Ordinary typeset dialogue over a plain background —
+the overwhelming majority of what a manhua contains — reads reliably, in one column or several.
+
+Two things it does not. **Hand-lettered shouting and sound effects**: on a real example the
+recogniser managed seven characters in ten at best, and the ones it missed were the most stylised.
+**Text over busy artwork**: line art supplies plenty of stroke-shaped shapes, and the recogniser
+reports them as characters, so a short line can come back with a dozen invented ones around it.
+Framing the snip inside the speech bubble helps; the reading is editable either way.
+
+That limit is the engine's, not a setting you can fix. Tesseract is trained on printed type, and
+drawn lettering is outside what it knows. Measurements are in `tools/bench-ocr.mjs` and
+`test/fixtures/ocr/` if you want to re-check after changing anything: enlarging the capture,
+thresholding it, straightening it, splitting the columns and swapping in the larger Tesseract
+models were all tried, and only enlarging helped. Recognition stays on-device and needs no
+network, which is the trade being made — cloud OCR does read those panels better.
+
+If a capture comes back wrong, the fix is usually to zoom the page in and snip again: the crop is
+taken at screen resolution, so a bigger page means more pixels for the recogniser to work with.
+
+
+**The recognised text is editable.** It sits under the capture as a normal text box: select it,
+copy it, or correct it. Correcting it re-splits the line and looks the words up again, which is
+usually faster than re-snipping — recognition may fumble a stylised glyph, but the capture is
+right there above the box to check against.
+
+**Translate the sentence** is off by default, and is the only part of the extension that sends
+anything you have read to a third party. When it is off, the extension holds no permission to
+reach the translation server at all — that is enforced by the browser rather than promised by
+this code, because the permission is optional and only requested when you turn the setting on.
+Enabling it sends the recognised line, and nothing else, to Google Translate; the page, its
+address, and everything on the hover path stay where they are. Dictionary lookups are local
+either way, since the whole dictionary is on disk.
+
 ### Pronunciation
 
 Every entry carries a speaker button — one **per reading**, so 打 *dá* and 打 *dǎ* are played

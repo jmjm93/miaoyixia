@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "fetch-dict": "node tools/fetch-dict.mjs",
+    "fetch-ocr": "node tools/fetch-ocr.mjs",
+    "bench-ocr": "node tools/bench-ocr.mjs",
     "build-dict": "node tools/build-dict.mjs",
     "icons": "node tools/make-icons.mjs",
     "icons:preview": "node tools/make-icons.mjs --preview icon-preview.png",
@@ -14,6 +16,7 @@
     "test": "node --test \"test/**/*.test.mjs\""
   },
   "devDependencies": {
-    "puppeteer-core": "^24.43.1"
+    "puppeteer-core": "^24.43.1",
+    "tesseract.js": "^7.0.0"
   }
 }

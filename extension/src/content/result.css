@@ -1,3 +1,9 @@
+/* Scaled from its anchored corner when cancelling the page zoom, so the top-left stays where the
+   placement maths put it. */
+:host {
+  transform-origin: top left;
+}
+
 /* The snip result window. popup.css is loaded ahead of this file into the same shadow root and
    supplies the card, the tabs and every entry rule, so what's here is only what makes this
    window a window: the captured image, its caption, the close button and the status line.
@@ -15,14 +21,193 @@
      other scrolls -- so anything even a pixel wider than the content box produced one. */
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Axes set separately, and deliberately. overflow-x must stay hidden -- that is what stopped
+     the horizontal scrollbar CSS conjures when one axis scrolls and the other is `visible`.
+     overflow-y is `auto` as a last resort: the capture can only shrink so far, and past that a
+     scrolling card is honest where a clipped one just loses the entries off the bottom. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* Everything above the definitions keeps its natural height; only the panel gives way. */
 .shot,
+.tuner,
+.line-row,
+.translation,
 .status,
+.tokens,
 .tabs {
   flex: none;
+}
+
+/* The recognised line, as editable text. Above the chips, because it is what they are made from
+   -- and because correcting a glyph here is the fastest route to a right answer when the
+   recogniser has fumbled one. */
+.line-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 12px 6px;
+}
+
+.line-row[hidden] {
+  display: none;
+}
+
+.line {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--zh-hover);
+  color: var(--zh-fg);
+  font: inherit;
+  font-size: calc(var(--zh-font-size) * 1.1);
+  line-height: 1.5;
+  /* Sized to its content by #fitLine; dragging the corner would fight that. */
+  resize: none;
+  overflow-y: auto;
+}
+
+.line:hover {
+  border-color: var(--zh-border);
+}
+
+.line:focus {
+  outline: none;
+  border-color: var(--zh-accent);
+  background: var(--zh-bg);
+}
+
+/* The copy button borrows .shot-button for its geometry, but it sits on the card rather than over
+   the image, so it loses the dark plate that makes it legible there. */
+.shot-button.line-copy {
+  flex: none;
+  margin-top: 3px;
+  background: transparent;
+  color: var(--zh-muted);
+}
+
+.shot-button.line-copy:hover {
+  background: var(--zh-hover);
+  color: var(--zh-accent);
+}
+
+.shot-button.line-copy.is-done {
+  background: var(--zh-tone-3);
+  color: #ffffff;
+}
+
+/* The machine translation. Deliberately unlike an entry: the definitions below are local and
+   human-edited, this is a guess that came off the network, and the two should not read alike. */
+.translation {
+  margin: 0 12px 8px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--zh-border);
+  color: var(--zh-muted);
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+.translation[hidden] {
+  display: none;
+}
+
+/* What the recogniser was told to expect. A drawer inside the card rather than a floating
+   panel: it can never fall off the screen, and the window is already doing enough positioning. */
+.tuner {
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--zh-border);
+  background: var(--zh-hover);
+  font-size: 0.9em;
+}
+
+.tuner[hidden] {
+  display: none;
+}
+
+.tuner-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tuner-row select {
+  flex: none;
+  min-width: 46%;
+  padding: 2px 4px;
+  border: 1px solid var(--zh-border);
+  border-radius: 4px;
+  background: var(--zh-bg);
+  color: var(--zh-fg);
+  font: inherit;
+  font-size: inherit;
+}
+
+.shot-button.is-active {
+  background: var(--zh-accent);
+}
+
+/* The recognised line, one chip per word. Sits above the candidate tabs, which stay for choosing
+   a different length at the selected position. */
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--zh-border);
+}
+
+.tokens[hidden] {
+  display: none;
+}
+
+.token {
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--zh-hover);
+  color: var(--zh-fg);
+  font: inherit;
+  font-size: calc(var(--zh-font-size) * 1.05);
+  cursor: pointer;
+}
+
+.token:hover:not(:disabled) {
+  border-color: var(--zh-accent);
+}
+
+.token.is-active {
+  background: var(--zh-accent);
+  border-color: var(--zh-accent);
+  color: #ffffff;
+}
+
+/* Punctuation, latin, or whatever OCR invented: shown so the line reads whole, but nothing to
+   select. */
+.token:disabled {
+  background: transparent;
+  color: var(--zh-muted);
+  cursor: default;
+}
+
+.token:focus-visible {
+  outline: 2px solid var(--zh-accent);
+  outline-offset: 1px;
+}
+
+/* Squeezed past usefulness, the panel stops scrolling on its own and the card scrolls as one --
+   see #applyCompact. Two nested scrollbars around a five-pixel panel reach nothing. */
+.card.is-compact .panel {
+  overflow: visible;
+  min-height: auto;
 }
 
 .panel {
@@ -67,10 +252,14 @@
   line-height: 1.4;
 }
 
+/* Anchored to the host rather than to the capture, so they stay put while the card scrolls
+   underneath them. They keep their dark plate for the same reason they had one over the image:
+   whatever ends up behind them is not theirs to control. */
 .shot-actions {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 5px;
+  right: 5px;
+  z-index: 1;
   display: flex;
   gap: 4px;
 }
@@ -97,6 +286,13 @@
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* The gear is a filled shape, not an outline: a stroked cog at this size fills its own teeth in
+   and turns into a blob. */
+.shot-button svg .solid {
+  fill: currentColor;
+  stroke: none;
 }
 
 .shot-button:hover {

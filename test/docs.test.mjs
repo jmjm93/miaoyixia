@@ -29,6 +29,9 @@ const DOCUMENTED_AS = {
   triggerKey: 'Trigger',
   hoverDelay: 'Hover delay',
   script: 'Show script',
+  ocrScript: 'Script in images',
+  ocrOrientation: 'Text direction',
+  translation: 'Translate the sentence',
   audio: 'Audio source',
   ttsService: 'Synthesised fallback',
   speechRate: 'Playback speed',
@@ -100,6 +103,18 @@ test('the manifest declares an icon for both toolbar states', () => {
     // The off variant is set at runtime, so it must exist even though the manifest omits it.
     assert.doesNotThrow(() => readFileSync(join(root, 'extension', `icons/icon-off-${size}.png`)));
   }
+});
+
+test('translation is off by default, and its host permission is optional', () => {
+  // The privacy contract in two assertions. Default-off means nobody opts in by accident, and
+  // the permission being *optional* is what makes "nothing is sent" enforced by the browser
+  // rather than promised by our code: until it is granted, the fetch cannot reach the host.
+  assert.equal(DEFAULT_SETTINGS.translation, 'off');
+
+  const manifest = JSON.parse(read('extension/manifest.json'));
+  const translate = (list) => (list ?? []).some((p) => p.includes('translate.googleapis.com'));
+  assert.ok(translate(manifest.optional_host_permissions), 'translation host should be optional');
+  assert.ok(!translate(manifest.host_permissions), 'translation host must not be granted up front');
 });
 
 test('the manifest permissions cover what the code uses', () => {

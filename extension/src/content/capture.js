@@ -67,14 +67,18 @@
   /**
    * Read Chinese out of a captured crop.
    *
-   * Not implemented yet: the recogniser and its model are the next piece of work. Answering null
-   * rather than throwing is what lets the result window ship first -- it shows the capture and
-   * says the text is still to come, which is also exactly what it will show when OCR lands and
-   * finds nothing legible.
+   * The recogniser itself is nowhere near here -- it runs in an offscreen document, because it
+   * is several megabytes of WASM that has to outlive the service worker. This just asks for it.
    *
+   * Answers null when nothing legible was found, which the result window reports as such. That
+   * is a normal outcome on a textured panel, not a failure, so it does not throw.
+   *
+   * @param {{dataUrl: string}} shot
    * @returns {Promise<string|null>}
    */
-  zh.recognise = async function recognise() {
-    return null;
+  zh.recognise = async function recognise(shot) {
+    const response = await chrome.runtime.sendMessage({ type: 'recognise', dataUrl: shot.dataUrl });
+    if (!response?.ok) throw new Error(response?.error ?? 'no response');
+    return response.result?.text ?? null;
   };
 })();

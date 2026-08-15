@@ -83,6 +83,49 @@
         </label>
       </section>
 
+      <h2 data-i18n="ocrHeading">Text in images</h2>
+      <section>
+        <label class="row">
+          <span>
+            <span data-i18n="ocrScript">Script in images</span>
+            <small data-i18n="ocrScriptHint">Which script the text in images is written in.</small>
+          </span>
+          <select id="ocrScript">
+            <option value="simplified" data-i18n="scriptSimplified">Simplified</option>
+            <option value="traditional" data-i18n="scriptTraditional">Traditional</option>
+          </select>
+        </label>
+
+        <label class="row">
+          <span>
+            <span data-i18n="ocrOrientation">Text direction</span>
+            <small data-i18n="ocrOrientationHint">Manhua is often set vertically.</small>
+          </span>
+          <select id="ocrOrientation">
+            <option value="horizontal" data-i18n="ocrHorizontal">Horizontal</option>
+            <option value="vertical" data-i18n="ocrVertical">Vertical</option>
+          </select>
+        </label>
+        <label class="row">
+          <span>
+            <span data-i18n="translation">Translate the sentence</span>
+            <small data-i18n="translationHint">Sends the recognised line to Google Translate.</small>
+          </span>
+          <select id="translation">
+            <option value="off" data-i18n="translationOff">Off — nothing is sent</option>
+            <option value="google" data-i18n="translationGoogle">Google Translate</option>
+          </select>
+        </label>
+
+        <div class="row" id="translationPermissionRow">
+          <span>
+            <span data-i18n="networkAccess">Network access</span>
+            <small id="translationPermissionState" data-i18n="notGranted">Not granted</small>
+          </span>
+          <button type="button" id="translationGrant" data-i18n="grant">Grant</button>
+        </div>
+      </section>
+
       <h2 data-i18n="pronunciation">Pronunciation</h2>
       <section>
         <label class="row">

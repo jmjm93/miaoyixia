@@ -4,7 +4,16 @@
   "version": "1.0.0",
   "description": "__MSG_extDescription__",
   "default_locale": "en",
-  "permissions": ["storage", "contextMenus", "unlimitedStorage", "activeTab"],
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "unlimitedStorage",
+    "activeTab",
+    "offscreen"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "host_permissions": [
     "https://commons.wikimedia.org/*",
     "https://upload.wikimedia.org/*",
@@ -14,7 +23,8 @@
   "optional_host_permissions": [
     "http://127.0.0.1:8765/*",
     "http://localhost:8765/*",
-    "https://raw.githubusercontent.com/*"
+    "https://raw.githubusercontent.com/*",
+    "https://translate.googleapis.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",
@@ -22,7 +32,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "src/lib/messages.js",
         "src/content/text-at-point.js",
@@ -40,8 +52,14 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/content/popup.css", "src/content/snip.css", "src/content/result.css"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "src/content/popup.css",
+        "src/content/snip.css",
+        "src/content/result.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "options_ui": {

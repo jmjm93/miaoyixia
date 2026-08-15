@@ -100,6 +100,11 @@
     // Straight back into framing. beginSnip hides the window itself, so the retry button and the
     // toolbar button reach the same place from either state.
     result.onRetry = beginSnip;
+    // The tuner writes straight to storage, the same place the options page writes. The
+    // storage listener below then feeds the new settings back to both windows.
+    result.onSetting = (patch) => chrome.storage.sync.set(patch);
+    result.onReread = rereadSnip;
+    result.onEdit = reviseLine;
 
     addListeners();
   }
@@ -128,6 +133,18 @@
       { capture: true, passive: true },
     );
     window.addEventListener('blur', dismiss);
+
+    // Zoom and window resizing both land here. The result window is placed when its contents
+    // change and never otherwise, so without this it keeps a height budgeted for a viewport that
+    // has since changed size -- most visibly after zooming in to capture something and back out
+    // again, which leaves the definitions crushed into a few pixels.
+    window.addEventListener('resize', () => {
+      if (!result?.visible) return;
+      // Placed straight away so it never looks broken while the zoom round trip is in flight,
+      // then corrected once the factor comes back.
+      result.reposition();
+      applyZoom();
+    });
     // In hover mode nothing else signals that the user has left; without this the popup
     // would sit there after the pointer exits the window.
     document.addEventListener('mouseleave', dismiss);
@@ -168,6 +185,11 @@
     mouseDown = true;
     // A click anywhere but the popup dismisses it.
     if (popup.visible && !popup.contains(event.target)) dismiss();
+
+    // The result window has no pointer-leaves-the-word gesture to close it either, and a click
+    // on the page is the obvious way to be done with it. Its own buttons stop their clicks, and
+    // a click inside it retargets to the host, so contains() covers everything within.
+    if (result.visible && !result.contains(event.target)) result.hide();
   }
 
   function onMouseMove(event) {
@@ -318,9 +340,12 @@
 
   function onKeyDown(event) {
     // Before the popup's own Escape: the result window is the thing in front, and it has no
-    // pointer-leaves-the-word gesture to dismiss it with.
+    // pointer-leaves-the-word gesture to dismiss it with. Innermost thing first, so Escape backs
+    // out of the recogniser settings rather than throwing away the capture they apply to --
+    // closing the tuner is also what applies them.
     if (result.visible && event.key === 'Escape') {
-      result.hide();
+      if (result.tuning) result.closeTuner();
+      else result.hide();
       return;
     }
 
@@ -503,8 +528,113 @@
    * Lookups stand down for the duration: the overlay is in front of everything, so a popup
    * opened behind it would be both invisible and impossible to dismiss.
    */
+  /**
+   * Match the result window's scale to the page's zoom, so it cancels out.
+   *
+   * Only the service worker can read the zoom factor -- see handleZoom. Failure is ignored: the
+   * window is merely the wrong size, which beats not showing it.
+   */
+  async function applyZoom() {
+    try {
+      const { factor } = await send({ type: 'zoom' });
+      result.setZoom(factor);
+    } catch (error) {
+      console.debug('[zh-dic] could not read the page zoom', error);
+    }
+  }
+
   /** Resolves once a frame has actually been painted. */
   const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  /** The crop currently on screen, so it can be read again without framing a new one. */
+  let lastShot = null;
+
+  /**
+   * Recognise a crop and look up what it says.
+   *
+   * Split out from beginSnip because it is also the whole of a re-read: changing the script or
+   * direction changes how the *same* pixels should be interpreted, not which pixels they are.
+   */
+  async function readShot(shot) {
+    result.setStatus(t('shotReading'));
+
+    const text = await zh.recognise(shot);
+    // Shown whether or not it is any good: it is editable, and a capture that read badly is
+    // usually two keystrokes from reading correctly.
+    result.setLine(text ?? '');
+    if (!text) {
+      result.setStatus(t('shotNoText'));
+      return;
+    }
+
+    await lookupLine(text);
+  }
+
+  /**
+   * Segment a line and show what it says.
+   *
+   * 'read' rather than 'lookup': a hover knows where its word starts, but a whole line is one
+   * unbroken run of characters and has to be segmented before any of it can be looked up. Asking
+   * for a lookup here is what made a sentence answer only for its first word. The line itself
+   * becomes the sentence on every card it produces.
+   */
+  async function lookupLine(text) {
+    const reading = await send({
+      type: 'read',
+      text,
+      url: location.href,
+      title: document.title,
+    });
+    result.showReading(reading.tokens);
+
+    // Not awaited: the reading is already on screen and useful, and a translation is a network
+    // round trip that must not hold it up. Answers nothing at all when the setting is off.
+    translateLine(text);
+  }
+
+  /**
+   * Ask for a machine translation of the line, if the user has turned that on.
+   *
+   * Failure is logged and dropped rather than surfaced. It is a convenience on top of a lookup
+   * that already worked, and the endpoint is a public one that can rate-limit at any time.
+   */
+  async function translateLine(text) {
+    result.setTranslation('');
+    try {
+      const { text: translated } = await send({ type: 'translate', text });
+      // The window may have been closed, re-snipped or re-edited while this was in flight.
+      if (translated && result.visible && result.line === text) result.setTranslation(translated);
+    } catch (error) {
+      console.debug('[zh-dic] no translation', error);
+    }
+  }
+
+  /** The user corrected the recognised text. Look up what they actually meant. */
+  async function reviseLine(text) {
+    if (!result.visible) return;
+    try {
+      if (!text.trim()) {
+        result.showReading([]);
+        return;
+      }
+      result.setStatus(t('shotReading'));
+      await lookupLine(text);
+    } catch (error) {
+      console.error('[zh-dic] looking up the corrected line failed', error);
+      result.setStatus(t('shotFailed'));
+    }
+  }
+
+  /** Read the capture already on screen again, after the recogniser settings changed. */
+  async function rereadSnip() {
+    if (!lastShot || !result.visible) return;
+    try {
+      await readShot(lastShot);
+    } catch (error) {
+      console.error('[zh-dic] re-reading the capture failed', error);
+      result.setStatus(t('shotFailed'));
+    }
+  }
 
   async function beginSnip() {
     if (snipping) return;
@@ -519,6 +649,9 @@
       // captureVisibleTab photographs what is genuinely on screen. Without waiting for a frame
       // painted without it, every capture comes back with the dimming over it.
       await nextPaint();
+
+      // Before the window is shown, so it never appears at the wrong size and then jump.
+      await applyZoom();
 
       const { dataUrl } = await send({ type: 'capture' });
       // innerWidth/innerHeight, NOT documentElement.clientWidth/clientHeight. The client size
@@ -535,22 +668,9 @@
       // fast part to judge, so there is no reason to make the user wait for the text.
       result.show(shot, region);
 
-      const text = await zh.recognise(shot);
-      if (!text) {
-        result.setStatus(t('shotNoText'));
-        return;
-      }
-
-      const lookup = await send({
-        type: 'lookup',
-        text,
-        // The recognised line is its own context: there is no surrounding page text to take a
-        // sentence from, and a card made from this deserves to carry what was actually read.
-        sentence: text,
-        url: location.href,
-        title: document.title,
-      });
-      result.showCandidates(lookup.candidates);
+      // Kept so the recogniser settings can be changed and applied to this same capture.
+      lastShot = shot;
+      await readShot(shot);
     } catch (error) {
       console.error('[zh-dic] snip failed', error);
       // A failure before the window opened has nowhere to be shown; the log is all there is.

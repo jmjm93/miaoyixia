@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join } from 'node:path';
-import { candidatesFor, installDictStub } from './dict-stub.mjs';
+import { candidatesFor, installDictStub, readingFor } from './dict-stub.mjs';
 
 installDictStub();
 
@@ -128,6 +128,10 @@ async function openPage(
     if (lookupDelay) await new Promise((r) => setTimeout(r, lookupDelay));
     return { candidates: await candidatesFor(text, {}, translate), glossPending };
   });
+  await page.exposeFunction('__zhRead', async (text) => ({
+    tokens: await readingFor(text, {}, translate),
+    glossPending,
+  }));
   await page.exposeFunction('__zhAudio', async () => audioResult);
   // Returning null makes the stub reject, standing in for Anki being closed.
   await page.exposeFunction('__zhAnkiInspect', async () => ankiInspect);
@@ -187,7 +191,21 @@ async function openPage(
          sendMessage: async (msg) => {
            if (msg.type === 'getSettings') return { ok: true, result: window.__settings };
            if (msg.type === 'lookup') return { ok: true, result: await window.__zhLookup(msg.text) };
+           if (msg.type === 'read') return { ok: true, result: await window.__zhRead(msg.text) };
            if (msg.type === 'capture') return { ok: true, result: { dataUrl: window.__fakeCapture() } };
+           // Off unless a test asks for one, mirroring the real default.
+           if (msg.type === 'translate') return { ok: true, result: { text: window.__translation ?? null } };
+           // Only the service worker can read page zoom, so the harness stands in for it.
+           if (msg.type === 'zoom') return { ok: true, result: { factor: window.__zoom ?? 1 } };
+           // The real recogniser is 6 MB of WASM in an offscreen document, which none of this
+           // harness has. __ocrText stands in for whatever it would have read; null is the
+           // ordinary "nothing legible on this panel" answer rather than a failure.
+           // __readAs stands in for the recogniser *and* for the model choice the service worker
+           // makes from the settings, so a test can prove a re-read used the new ones.
+           if (msg.type === 'recognise') {
+             const text = window.__readAs ? window.__readAs(window.__settings) : (window.__ocrText ?? null);
+             return { ok: true, result: { text: text ?? null } };
+           }
            if (msg.type === 'audio') return { ok: true, result: await window.__zhAudio(msg.word, msg.pinyin) };
            if (msg.type === 'ankiInspect') {
              const r = await window.__zhAnkiInspect();
@@ -203,7 +221,23 @@ async function openPage(
          // test start a snip the same way the toolbar button does.
          onMessage: { addListener: (fn) => { window.__zhOnMessage = fn; } },
        },
-       storage: { sync: { get: async () => window.__settings }, onChanged: { addListener() {} } },
+       storage: {
+         sync: {
+           get: async () => window.__settings,
+           // The result window's tuner writes here, the same as the options page does. Without a
+           // set() the whole flow throws, so this is not optional scaffolding.
+           //
+           // And a write notifies, the way the browser does. Discarding the listener meant the
+           // content script's own settings-changed handler could never run under test, which is
+           // most of what reacting to a settings change *is*.
+           set: async (patch) => {
+             Object.assign(window.__settings, patch);
+             const changes = Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, { newValue: v }]));
+             await window.__zhStorageChanged?.(changes, 'sync');
+           },
+         },
+         onChanged: { addListener: (fn) => { window.__zhStorageChanged = fn; } },
+       },
      };`,
   );
 
@@ -1111,7 +1145,9 @@ test('the window shows the region that was framed, not merely one of that size',
   await page.close();
 });
 
-test('with no recogniser yet, the window still shows the capture and says so', async () => {
+test('when nothing legible is read, the window still shows the capture and says so', async () => {
+  // The ordinary outcome on a textured panel, and the reason the image stays on screen: seeing
+  // what was actually captured is what tells the user to zoom in and reframe.
   const page = await openPage();
   await snipTheRedBlock(page);
 
@@ -1124,7 +1160,7 @@ test('with no recogniser yet, the window still shows the capture and says so', a
 
   assert.equal(state.hasImage, true);
   assert.equal(state.statusShown, true);
-  assert.match(state.status, /recognition is still to come/);
+  assert.match(state.status, /No text could be read/);
   assert.equal(state.entries, 0);
 
   page.assertNoErrors();
@@ -1331,4 +1367,788 @@ test('the crop maps through the viewport it is given, not the document width', a
 
   page.assertNoErrors();
   await page.close();
+});
+
+// --- the vendored recogniser -------------------------------------------------
+//
+// Everything above stubs OCR, which is what let a broken import ship: offscreen.js destructured
+// `{ createWorker }` from a bundle that exports only a default, so the module threw on
+// evaluation, never registered its listener, and every snip failed with "Receiving end does not
+// exist" -- an error that reads like a missing document rather than a syntax-level mistake.
+//
+// These load the vendored files the way the offscreen document does. They need `npm run
+// fetch-ocr` to have run, and skip rather than fail when it hasn't, since the assets are
+// gitignored like the dictionary shards.
+
+const OCR_DIR = join(root, 'extension', 'data', 'ocr');
+const ocrVendored = ['tesseract.esm.min.js', 'worker.min.js', 'tesseract-core-simd-lstm.wasm.js', 'chi_sim.traineddata'].every(
+  (f) => existsSync(join(OCR_DIR, f)),
+);
+const ocrSkip = ocrVendored ? false : 'run `npm run fetch-ocr` to vendor the recogniser';
+
+test('the vendored bundle exports what the offscreen document imports', { skip: ocrSkip }, async () => {
+  const page = await openPage();
+
+  const shape = await page.evaluate(async (base) => {
+    const ns = await import(`${base}/extension/data/ocr/tesseract.esm.min.js`);
+    return {
+      named: typeof ns.createWorker,
+      viaDefault: typeof ns.default?.createWorker,
+    };
+  }, origin);
+
+  // The contract offscreen.js relies on. If a future tesseract.js adds named exports this test
+  // still passes; if it drops the default one, it fails here rather than at the first snip.
+  assert.equal(shape.viaDefault, 'function', 'the default export has no createWorker');
+  // Documents why the import must be a default one. This is the assertion that was violated.
+  assert.equal(shape.named, 'undefined', 'named exports appeared; the default import may be stale');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the vendored engine reads Chinese off an image', { skip: ocrSkip }, async () => {
+  const page = await openPage();
+
+  const read = await page.evaluate(async (base) => {
+    const ns = await import(`${base}/extension/data/ocr/tesseract.esm.min.js`);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 520;
+    canvas.height = 140;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111111';
+    ctx.font = '44px "Microsoft YaHei", SimHei, sans-serif';
+    ctx.fillText('我喜欢吃中国菜', 20, 90);
+
+    // The same options offscreen.js passes, so a wrong path or a renamed core fails here too.
+    const worker = await ns.default.createWorker('chi_sim', 1, {
+      workerPath: `${base}/extension/data/ocr/worker.min.js`,
+      corePath: `${base}/extension/data/ocr/tesseract-core-simd-lstm.wasm.js`,
+      langPath: `${base}/extension/data/ocr`,
+      gzip: false,
+      workerBlobURL: false,
+      cacheMethod: 'none',
+    });
+    const { data } = await worker.recognize(canvas.toDataURL('image/png'));
+    await worker.terminate();
+    // The same tidy() offscreen.js applies: Tesseract spaces CJK characters apart, and
+    // "中 国 菜" matches nothing in the dictionary.
+    return { text: data.text.replace(/\s+/gu, ''), confidence: data.confidence };
+  }, origin);
+
+  assert.equal(read.text, '我喜欢吃中国菜');
+  assert.ok(read.confidence > 50, `confidence was only ${read.confidence}`);
+
+  await page.close();
+});
+
+test('a recognised sentence becomes one chip per word, and each one looks up', async () => {
+  // The reported bug end to end: a lookup answered for 开始 and ignored 阅读, because it only
+  // ever matched from position 0.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const chips = await inResult(page, (root) => ({
+    words: [...root.querySelectorAll('.token')].map((t) => t.textContent),
+    active: root.querySelector('.token.is-active')?.textContent,
+    showing: root.querySelector('.entry .word').textContent,
+  }));
+
+  assert.deepEqual(chips.words, ['开始', '阅读'], 'the line was not split into both words');
+  assert.equal(chips.active, '开始');
+  assert.equal(chips.showing, '开始');
+
+  // The second word is a click away rather than a re-snip -- this is what was missing before.
+  await page.evaluate(() => {
+    const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+      (h) => h.dataset.zhDicResult !== undefined,
+    );
+    host.shadowRoot.querySelectorAll('.token')[1].click();
+  });
+
+  const after = await inResult(page, (root) => ({
+    active: root.querySelector('.token.is-active')?.textContent,
+    showing: root.querySelector('.entry .word').textContent,
+    senses: root.querySelectorAll('.entry .senses li').length,
+  }));
+
+  assert.equal(after.active, '阅读');
+  assert.equal(after.showing, '阅读');
+  assert.ok(after.senses > 0, '阅读 has no definitions');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a single-word capture shows no chip row', async () => {
+  // A row of one chip would restate the entry directly beneath it.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '中国菜';
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const state = await inResult(page, (root) => ({
+    chipsHidden: root.querySelector('.tokens').hidden,
+    showing: root.querySelector('.entry .word').textContent,
+    // 中国菜 also matches 中国 and 中, so the length tabs are still offered.
+    tabs: [...root.querySelectorAll('.tab')].map((t) => t.textContent.replace(/\d+$/, '')),
+  }));
+
+  assert.equal(state.chipsHidden, true);
+  assert.equal(state.showing, '中国菜');
+  assert.ok(state.tabs.includes('中国'), `expected a shorter candidate, got ${state.tabs.join(', ')}`);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+/** Wait out the reposition that follows the capture decoding. */
+const settled = (page) =>
+  page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+/** The result window's box, and what it has to fit inside. */
+const windowBox = (page) =>
+  inResult(page, (root) => {
+    const rect = root.querySelector('.card').getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      region: window.__captureRegion,
+    };
+  });
+
+/** Snip a given region and wait until the window has finished growing into its final size. */
+async function snipAt(page, region, text = '开始阅读') {
+  await page.evaluate(
+    ([r, t]) => {
+      window.zhDic.recognise = async () => t;
+      window.__captureRegion = r;
+    },
+    [region, text],
+  );
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+}
+
+test('a capture that reads nothing is still placed for its real height', async () => {
+  // Guards the reposition that follows the capture decoding.
+  //
+  // It is load-bearing precisely here. On the normal path showReading() places the window again
+  // once the entries exist, which masks a stale first measurement -- but when nothing is read
+  // showReading is never called, so the only thing that can account for the image's ~240px is
+  // the decode handler. Measured before the capture had decoded, the card looks about 70px tall,
+  // fits in the ~280px below, and is placed there; it then grows past the gap it was chosen for.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => null;
+    window.__captureRegion = { x: 200, y: 380, width: 180, height: 120 };
+  });
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.status')?.textContent,
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  const box = await windowBox(page);
+  assert.ok(box.bottom <= box.viewport.height, `the window runs off the bottom`);
+  // The real test: with the finished height accounted for, below no longer fits and above does,
+  // so it belongs above the capture. Placed on the pre-decode height it stays below it.
+  assert.ok(
+    box.bottom <= box.region.y + 1,
+    `the window was placed below the capture on a height it then outgrew ` +
+      `(bottom ${Math.round(box.bottom)}, capture top ${box.region.y})`,
+  );
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a capture with no room on either side still lands on screen', async () => {
+  // Guards the clamp. A tall snip leaves ~50px below and ~30px above: neither side fits, so
+  // neither flipping nor the minimum height can save it, and the minimum height is itself what
+  // pushes the card back over the edge it was being kept inside. Overlapping the capture is the
+  // right answer here -- which side it sits on is a preference, staying on screen is not.
+  const page = await openPage();
+  await snipAt(page, { x: 200, y: 30, width: 400, height: 700 });
+
+  const box = await windowBox(page);
+  assert.ok(
+    box.bottom <= box.viewport.height,
+    `the window runs ${Math.round(box.bottom - box.viewport.height)}px off the bottom`,
+  );
+  assert.ok(box.top >= 0, `the window runs ${Math.round(-box.top)}px off the top`);
+  assert.ok(box.left >= 0 && box.right <= box.viewport.width, 'the window runs off the side');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the gear re-reads the same capture with the new settings, without a new snip', async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    // Stands in for the model changing: the same pixels read differently once the settings say
+    // they run vertically.
+    window.__readAs = (settings) => (settings.ocrOrientation === 'vertical' ? '阅读' : '开始');
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  assert.equal(await inResult(page, (root) => root.querySelector('.entry .word').textContent), '开始');
+  assert.equal(await inResult(page, (root) => root.querySelector('.tuner').hidden), true);
+
+  const inWindow = (fn) =>
+    page.evaluate((source) => {
+      const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+        (h) => h.dataset.zhDicResult !== undefined,
+      );
+      // eslint-disable-next-line no-new-func
+      return new Function('root', `return (${source})(root)`)(host.shadowRoot);
+    }, fn.toString());
+
+  // Open the tuner and switch to vertical.
+  await inWindow((root) => root.querySelector('.shot-tune').click());
+  assert.equal(await inResult(page, (root) => root.querySelector('.tuner').hidden), false);
+
+  await inWindow((root) => {
+    const select = root.querySelector('[data-setting="ocrOrientation"]');
+    select.value = 'vertical';
+    select.dispatchEvent(new Event('change'));
+  });
+
+  // Still showing the old reading: the change applies on close, not on every keystroke of it.
+  assert.equal(await inResult(page, (root) => root.querySelector('.entry .word').textContent), '开始');
+
+  await inWindow((root) => root.querySelector('.shot-tune').click());
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word')?.textContent === '阅读',
+    { timeout: 5000 },
+  );
+
+  const after = await inResult(page, (root) => ({
+    tunerHidden: root.querySelector('.tuner').hidden,
+    // The capture is still the one that was framed -- this was a re-read, not a re-snip.
+    hasImage: !!root.querySelector('.shot-image').getAttribute('src'),
+    overlayUp: !!document.querySelector('.sheet'),
+  }));
+  assert.equal(after.tunerHidden, true);
+  assert.equal(after.hasImage, true);
+  assert.equal(after.overlayUp, false, 'a new snip was started instead of re-reading');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('closing the gear without changing anything does not re-read', async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.__reads = 0;
+    window.__readAs = () => {
+      window.__reads += 1;
+      return '开始';
+    };
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const before = await page.evaluate(() => window.__reads);
+
+  await page.evaluate(() => {
+    const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+      (h) => h.dataset.zhDicResult !== undefined,
+    );
+    host.shadowRoot.querySelector('.shot-tune').click();
+    host.shadowRoot.querySelector('.shot-tune').click();
+  });
+
+  // Opening and shutting the settings should cost nothing; re-reading takes seconds in reality.
+  assert.equal(await page.evaluate(() => window.__reads), before);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the result window is translated, and stays translated when the language changes', async () => {
+  // The popup gets this for free -- its one fixed string is rewritten on every settings change.
+  // This window builds a dozen of them in its constructor, so they froze in whatever language
+  // was active then: switching to Spanish with a tab already open left the drawer in English.
+  const page = await openPage({ uiLanguage: 'es' });
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始';
+  });
+  await snipTheRedBlock(page);
+
+  const openTuner = () =>
+    page.evaluate(() => {
+      const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+        (h) => h.dataset.zhDicResult !== undefined,
+      );
+      if (host.shadowRoot.querySelector('.tuner').hidden) host.shadowRoot.querySelector('.shot-tune').click();
+    });
+
+  const labels = () =>
+    inResult(page, (root) => ({
+      rows: [...root.querySelectorAll('.tuner-row > span')].map((s) => s.textContent),
+      options: [...root.querySelectorAll('[data-setting="ocrScript"] option')].map((o) => o.textContent),
+      gear: root.querySelector('.shot-tune').title,
+      alt: root.querySelector('.shot-image').alt,
+    }));
+
+  await openTuner();
+  const es = await labels();
+  assert.deepEqual(es.rows, ['Escritura en las imágenes', 'Dirección del texto']);
+  assert.deepEqual(es.options, ['Simplificado', 'Tradicional']);
+  assert.equal(es.gear, 'Cómo leer esto');
+  assert.equal(es.alt, 'El texto que has capturado');
+
+  // Switch the interface to English the way the options page does -- by writing the setting --
+  // with the window still open. This is the path that used to leave the drawer frozen.
+  await page.evaluate(() => chrome.storage.sync.set({ uiLanguage: 'en' }));
+
+  await openTuner();
+  const en = await labels();
+  assert.deepEqual(en.rows, ['Script in images', 'Text direction']);
+  assert.deepEqual(en.options, ['Simplified', 'Traditional']);
+  assert.equal(en.gear, 'What to read this as');
+  assert.equal(en.alt, 'The text you captured');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the recognised line is shown as text, and correcting it re-runs the lookup', async () => {
+  // The whole point of the editable line. Recognition on stylised lettering is imperfect, the
+  // capture is on screen right above the box, and fixing one glyph by eye turns a partial reading
+  // into an exact one -- which is worth more than any accuracy the engine could have given us.
+  const page = await openPage();
+  await page.evaluate(() => {
+    // Last character misread: 读 came back as the similar-looking 渎.
+    window.zhDic.recognise = async () => '开始阅渎';
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+
+  const before = await inResult(page, (root) => ({
+    line: root.querySelector('.line').value,
+    chips: [...root.querySelectorAll('.token')].map((c) => c.textContent),
+  }));
+  assert.equal(before.line, '开始阅渎', 'the line does not carry the recognised text');
+  // 阅渎 is not a word, so it does not segment as one.
+  assert.ok(!before.chips.includes('阅读'), `expected a bad split, got ${before.chips.join(' ')}`);
+
+  // Correct it the way a user would: edit the box and leave it.
+  await page.evaluate(() => {
+    const host = [...document.querySelectorAll('[data-zh-dic-host]')].find(
+      (h) => h.dataset.zhDicResult !== undefined,
+    );
+    const line = host.shadowRoot.querySelector('.line');
+    line.value = '开始阅读';
+    line.dispatchEvent(new Event('change'));
+  });
+
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.token:last-child')?.textContent === '阅读',
+    { timeout: 5000 },
+  );
+
+  const after = await inResult(page, (root) => ({
+    chips: [...root.querySelectorAll('.token')].map((c) => c.textContent),
+    showing: root.querySelector('.entry .word').textContent,
+    // The capture stays put; this was a re-read of the text, not a re-snip.
+    hasImage: !!root.querySelector('.shot-image').getAttribute('src'),
+  }));
+  assert.deepEqual(after.chips, ['开始', '阅读'], 'the correction did not re-segment the line');
+  assert.equal(after.hasImage, true);
+  assert.ok(after.showing);
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+
+/**
+ * The layout rules the result window must always satisfy, whatever is in it.
+ *
+ * "The card never scrolls" used to be the rule, and is not any more: when the viewport is too
+ * cramped to pin the capture above a usable panel, the window deliberately becomes one scroll
+ * area instead. What has to hold regardless is that everything stays reachable and that there is
+ * never more than one scrollbar to reach it with.
+ */
+const layoutOf = (page) =>
+  inResult(page, (root) => {
+    const card = root.querySelector('.card');
+    const panel = root.querySelector('.panel');
+    const rect = card.getBoundingClientRect();
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      cardHeight: rect.height,
+      maxHeight: card.style.maxHeight,
+      compact: card.classList.contains('is-compact'),
+      cardScrolls: card.scrollHeight > card.clientHeight + 1,
+      panelHeight: panel.getBoundingClientRect().height,
+      panelScrolls: panel.scrollHeight > panel.clientHeight + 1,
+      viewport: window.innerHeight,
+    };
+  });
+
+function assertLayout(box, where) {
+  assert.ok(box.bottom <= box.viewport, `${where}: runs ${Math.round(box.bottom - box.viewport)}px off the bottom`);
+  assert.ok(box.top >= 0, `${where}: runs ${Math.round(-box.top)}px off the top`);
+  // Two scrollbars means one of them is around something too small to use -- the five-pixel
+  // panel inside a scrolling card that prompted all of this.
+  assert.ok(!(box.cardScrolls && box.panelScrolls), `${where}: the card and the panel both scroll`);
+  // A panel worth scrolling has to be worth looking at.
+  if (box.panelScrolls) {
+    assert.ok(box.panelHeight > 40, `${where}: scrolling panel is only ${Math.round(box.panelHeight)}px tall`);
+  }
+}
+
+test('the window stays on screen once the line and translation are added to it', async () => {
+  // Regression: the editable line and the translation are both flex:none sections added after
+  // the window has already been placed, and each one arrives at a different moment -- the line
+  // when recognition returns, the translation a network round trip later.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__translation = 'Start reading — a translation long enough to wrap onto more than one line.';
+    window.__captureRegion = { x: 200, y: 380, width: 180, height: 120 };
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.translation:not([hidden])'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  assertLayout(await layoutOf(page), 'with a line and a translation');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the window re-fits itself after the viewport changes size', async () => {
+  // Zooming the page is what this is really about: zoom changes the viewport measured in CSS
+  // pixels, so a window placed while zoomed in keeps a height budgeted for half a screen. Coming
+  // back to normal zoom then leaves the definitions crushed into a few pixels inside a card that
+  // still thinks it is tiny. Resizing the viewport reproduces it exactly.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__translation = 'Start reading.';
+    window.__captureRegion = { x: 200, y: 60, width: 180, height: 90 };
+  });
+
+  await page.setViewport({ width: 900, height: 420 });
+  // Let the resize land before framing anything: the snip overlay cancels on resize, so a
+  // late-arriving one kills the drag half way through.
+  await settled(page);
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  // Back to a roomy viewport, as if the user zoomed out again.
+  await page.setViewport({ width: 900, height: 800 });
+  await settled(page);
+  await settled(page);
+
+  const after = await layoutOf(page);
+  assertLayout(after, 'after the viewport grew');
+
+  // The specific thing the resize handler does. Placed for a 420px viewport the card is capped
+  // near the 200px floor; with the taller viewport it should have taken the room now available.
+  // Without the handler that cap is never recomputed and the card stays small -- which is what
+  // crushes the definitions into a few pixels.
+  assert.ok(
+    after.cardHeight > 300,
+    `the card is still ${Math.round(after.cardHeight)}px (max-height ${after.maxHeight}) -- ` +
+      'it kept a height budgeted for the smaller viewport',
+  );
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the window cancels the page zoom instead of following it', async () => {
+  // People zoom in to capture text at a higher resolution -- it is the recommended fix for a poor
+  // reading -- but nobody zooms in to read the definitions. Following the page would balloon the
+  // window exactly when the viewport, measured in CSS pixels, has least room for it.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__captureRegion = { x: 200, y: 60, width: 180, height: 90 };
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  const plain = await layoutOf(page);
+  assertLayout(plain, 'at 100%');
+
+  // Now the page is zoomed to 200%, as it would be for a higher-resolution capture.
+  await page.evaluate(() => {
+    window.__zoom = 2;
+    window.dispatchEvent(new Event('resize'));
+  });
+  await settled(page);
+  await settled(page);
+
+  const zoomed = await inResult(page, (root) => {
+    const card = root.querySelector('.card');
+    return {
+      transform: getComputedStyle(root.host).transform,
+      rendered: card.getBoundingClientRect().height,
+      // The card's own layout height, before the host's transform shrinks it.
+      layout: card.offsetHeight,
+    };
+  });
+
+  // scale(0.5) shows up as a matrix; what matters is that it halves.
+  assert.match(zoomed.transform, /^matrix\(0\.5,/, `host transform is ${zoomed.transform}`);
+  // Halving the CSS-pixel footprint is what *keeps the physical size the same*: at 200% each CSS
+  // pixel is drawn twice as large. It is also what stops the window crowding a viewport which,
+  // measured in CSS pixels, has just halved along with it.
+  const ratio = zoomed.rendered / plain.cardHeight;
+  assert.ok(
+    ratio > 0.4 && ratio < 0.6,
+    `expected the CSS-pixel footprint to halve, got ${ratio.toFixed(2)} ` +
+      `(${Math.round(plain.cardHeight)} -> ${Math.round(zoomed.rendered)})`,
+  );
+  // Counter-scaled rather than merely made smaller: the card still lays out at full size and is
+  // drawn down, so nothing inside it was restyled and no text was reflowed.
+  assert.ok(
+    zoomed.layout > zoomed.rendered * 1.5,
+    `the card was shrunk rather than scaled (layout ${zoomed.layout}, rendered ${Math.round(zoomed.rendered)})`,
+  );
+
+  assertLayout(await layoutOf(page), 'at 200%');
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the action buttons stay put while the card scrolls under them', async () => {
+  // They used to be absolutely positioned inside .shot, which is a normal child of the scrolling
+  // card -- and an absolutely positioned element inside a scroll container scrolls with its
+  // content. So the gear, retry and close went off the top as soon as the window had more in it
+  // than fitted.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__translation = 'A translation long enough to add some height of its own.';
+    window.__captureRegion = { x: 200, y: 60, width: 180, height: 90 };
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  const moved = await inResult(page, (root) => {
+    const card = root.querySelector('.card');
+    const actions = root.querySelector('.shot-actions');
+    const before = actions.getBoundingClientRect().top;
+
+    // Structural: whatever the scroll position, they must not live inside the scroller.
+    const insideCard = card.contains(actions);
+
+    card.scrollTop = card.scrollHeight;
+    const after = actions.getBoundingClientRect().top;
+    return { insideCard, before, after, scrolled: card.scrollTop };
+  });
+
+  assert.equal(moved.insideCard, false, 'the buttons are inside the scrolling card');
+  assert.ok(
+    Math.abs(moved.after - moved.before) < 1,
+    `the buttons moved ${Math.round(moved.after - moved.before)}px when the card scrolled`,
+  );
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('a click on the page closes the window, and a click inside it does not', async () => {
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__captureRegion = { x: 400, y: 300, width: 180, height: 90 };
+  });
+
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  const box = await inResult(page, (root) => {
+    const r = root.querySelector('.card').getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
+
+  // Inside first: the capture itself, which is not a button and should do nothing at all.
+  await page.mouse.click(Math.round(box.x + box.width / 2), Math.round(box.y + 12));
+  assert.equal(
+    await inResult(page, (root) => root.host.hasAttribute('data-visible')),
+    true,
+    'clicking the window closed it',
+  );
+
+  // Then well clear of it.
+  await page.mouse.click(20, 20);
+  assert.equal(
+    await inResult(page, (root) => root.host.hasAttribute('data-visible')),
+    false,
+    'clicking the page left the window open',
+  );
+
+  page.assertNoErrors();
+  await page.close();
+});
+
+test('the buttons stay clear of the scrollbar when the card scrolls', async (t) => {
+  // They are anchored to the host, which spans the card including its scrollbar, so the rightmost
+  // one sat on top of it as soon as the card started scrolling. The width has to be measured --
+  // it differs by platform, and is zero when the card does not scroll at all.
+  //
+  // Headless Chrome lays out overlay scrollbars, which occupy no width, so there is often nothing
+  // here to collide with; styling ::-webkit-scrollbar does not change that either. The test skips
+  // itself rather than asserting something vacuous, and does run on a platform with classic
+  // scrollbars -- Windows, which is where the overlap was reported.
+  const page = await openPage();
+  await page.evaluate(() => {
+    window.zhDic.recognise = async () => '开始阅读';
+    window.__translation = 'A translation with enough length to push the card past its own height.';
+    window.__captureRegion = { x: 200, y: 40, width: 180, height: 90 };
+  });
+
+  // Cramped enough that the card has to scroll as one.
+  await page.setViewport({ width: 900, height: 380 });
+  await settled(page);
+  await snipTheRedBlock(page);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('[data-zh-dic-host]')]
+        .find((h) => h.dataset.zhDicResult !== undefined)
+        ?.shadowRoot?.querySelector('.entry .word'),
+    { timeout: 5000 },
+  );
+  await settled(page);
+
+  const box = await inResult(page, (root) => {
+    const card = root.querySelector('.card');
+    const actions = root.querySelector('.shot-actions');
+    const style = getComputedStyle(card);
+    const borderRight = parseFloat(style.borderRightWidth) || 0;
+    const borders = (parseFloat(style.borderLeftWidth) || 0) + borderRight;
+    return {
+      scrollbar: Math.max(0, card.offsetWidth - card.clientWidth - borders),
+      cardRight: card.getBoundingClientRect().right,
+      actionsRight: actions.getBoundingClientRect().right,
+      borderRight,
+      cardScrolls: card.scrollHeight > card.clientHeight + 1,
+    };
+  });
+
+  await page.close();
+
+  if (!box.cardScrolls || box.scrollbar <= 0) {
+    t.skip('no space-taking scrollbar was laid out; nothing to collide with here');
+    return;
+  }
+
+  // The buttons must end before the scrollbar starts.
+  const scrollbarStarts = box.cardRight - box.borderRight - box.scrollbar;
+  assert.ok(
+    box.actionsRight <= scrollbarStarts + 0.5,
+    `the buttons overlap the scrollbar by ${Math.round(box.actionsRight - scrollbarStarts)}px`,
+  );
 });

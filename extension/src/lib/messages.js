@@ -211,9 +211,31 @@
       snipHint: 'Drag over the text · Esc to cancel',
       close: 'Close',
       snipAgain: 'Snip again — reframe and retry',
+      ocrHeading: 'Text in images',
+      translation: 'Translate the sentence',
+      translationHint:
+        'Sends the recognised line to Google Translate. Off by default, and until you turn it ' +
+        'on the extension has no permission to reach that server at all. Lookups never leave ' +
+        'your computer either way.',
+      translationOff: 'Off — nothing is sent',
+      translationGoogle: 'Google Translate',
+      networkAccess: 'Network access',
+      recognisedLine: 'Recognised text — correct it if the reading is wrong',
+      copyLine: 'Copy the text',
+      ocrSettings: 'What to read this as',
+      ocrScript: 'Script in images',
+      ocrScriptHint: 'Which script the text in images is written in. Not guessed: simplified and traditional share too many characters for a wrong guess to look wrong.',
+      ocrOrientation: 'Text direction',
+      ocrOrientationHint: 'Manhua is often set vertically. The recogniser has to be told which to expect.',
+      ocrHorizontal: 'Horizontal',
+      ocrVertical: 'Vertical',
+      // Plain names. The display setting next door says "Simplified first", which is about
+      // which of the two to show above the other -- not a question being asked here.
+      scriptSimplified: 'Simplified',
+      scriptTraditional: 'Traditional',
       shotAlt: 'The text you captured',
       shotReading: 'Reading…',
-      shotNoText: 'No text read yet — recognition is still to come',
+      shotNoText: 'No text could be read — try zooming the page in and snipping again',
       shotNoMatch: 'Nothing in the dictionary matches what was read',
       shotFailed: 'Could not read this capture',
 
@@ -419,9 +441,29 @@
       snipHint: 'Arrastra sobre el texto · Esc para cancelar',
       close: 'Cerrar',
       snipAgain: 'Capturar de nuevo — reencuadra y reintenta',
+      ocrHeading: 'Texto en las imágenes',
+      translation: 'Traducir la frase',
+      translationHint:
+        'Envía la línea reconocida a Google Translate. Desactivado por defecto, y hasta que lo ' +
+        'actives la extensión no tiene permiso para acceder a ese servidor. Las búsquedas nunca ' +
+        'salen de tu ordenador en ningún caso.',
+      translationOff: 'Desactivado — no se envía nada',
+      translationGoogle: 'Google Translate',
+      networkAccess: 'Acceso a la red',
+      recognisedLine: 'Texto reconocido — corrígelo si la lectura no es correcta',
+      copyLine: 'Copiar el texto',
+      ocrSettings: 'Cómo leer esto',
+      ocrScript: 'Escritura en las imágenes',
+      ocrScriptHint: 'En qué escritura está el texto de las imágenes. No se adivina: simplificado y tradicional comparten demasiados caracteres como para que un error se note.',
+      ocrOrientation: 'Dirección del texto',
+      ocrOrientationHint: 'El manhua suele componerse en vertical. Hay que indicárselo al reconocedor.',
+      ocrHorizontal: 'Horizontal',
+      ocrVertical: 'Vertical',
+      scriptSimplified: 'Simplificado',
+      scriptTraditional: 'Tradicional',
       shotAlt: 'El texto que has capturado',
       shotReading: 'Leyendo…',
-      shotNoText: 'Aún no se ha leído texto — falta el reconocimiento',
+      shotNoText: 'No se pudo leer ningún texto — amplía la página y vuelve a capturar',
       shotNoMatch: 'Nada en el diccionario coincide con lo leído',
       shotFailed: 'No se pudo leer esta captura',
 

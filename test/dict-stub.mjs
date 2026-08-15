@@ -34,6 +34,37 @@ export function installDictStub() {
  * returns replacements, or null for an entry the layer doesn't cover. That null is the case
  * worth exercising -- it is how a real partly-translated dictionary behaves.
  */
+/**
+ * The same, for a whole recognised line: segmented into words, each with every candidate at its
+ * starting position.
+ *
+ * Uses the real segment() and the real shards, so a test that reads a sentence exercises the
+ * actual splitting rather than a fixture's idea of it.
+ */
+export async function readingFor(text, context = {}, translate = null) {
+  const { matchesByPosition } = await import('../extension/src/lib/dict-store.js');
+  const { buildCard } = await import('../extension/src/lib/card.js');
+  const { segment } = await import('../extension/src/lib/segment.js');
+
+  const chars = [...text];
+  const matchesAt = await matchesByPosition(text);
+  const spans = segment(
+    chars.length,
+    matchesAt.map((matches) => matches.map((match) => match.length)),
+  );
+
+  return spans.map(({ start, length }) => ({
+    text: chars.slice(start, start + length).join(''),
+    start,
+    length,
+    candidates: (matchesAt[start] ?? []).map(({ headword, length: wordLength, entries }) => ({
+      headword,
+      length: wordLength,
+      cards: entries.map((row) => buildCard(headword, row, context, translate?.(row[3].split('/')) ?? null)),
+    })),
+  }));
+}
+
 export async function candidatesFor(text, context = {}, translate = null) {
   const { lookupCandidates } = await import('../extension/src/lib/dict-store.js');
   const { buildCard } = await import('../extension/src/lib/card.js');
