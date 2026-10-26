@@ -126,7 +126,7 @@ export const DEFAULT_SETTINGS = {
   japaneseAnkiDeck: 'Japanese Mining',
   japaneseAnkiModel: 'Yomi',
   japaneseAnkiFields: {
-    Expression: 'headword', Meaning: 'senses', Reading: 'reading', Audio: 'none', Examples: 'sentence',
+    Expression: 'headword', Meaning: 'senses', Reading: 'reading', Audio: 'audio', Examples: 'sentence',
   },
   japaneseAnkiTags: 'miao-yixia',
   ankiDeck: 'Mandarin::Chinese Mining',

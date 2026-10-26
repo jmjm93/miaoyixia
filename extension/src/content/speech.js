@@ -18,7 +18,8 @@
    * Choose a voice for Mandarin. Exposed for testing, and kept a pure function of the list
    * so it can be exercised without a speech engine present.
    */
-  function pickVoice(voices) {
+  function pickVoice(voices, language = 'zh') {
+    if (language === 'ja') return voices.find((voice) => /^ja(?:[-_]|$)/i.test(voice.lang ?? '')) ?? null;
     const chinese = voices.filter((voice) => /^zh\b|^zh-/i.test(voice.lang ?? ''));
     if (!chinese.length) return null;
 
@@ -58,8 +59,8 @@
     pickVoice,
 
     /** Is there an OS voice that can read Chinese at all? */
-    voiceAvailable() {
-      return Boolean(pickVoice(availableVoices()));
+    voiceAvailable(language = 'zh') {
+      return Boolean(pickVoice(availableVoices(), language));
     },
 
     /** Names of the Chinese voices found, for the options page to report. */
@@ -70,8 +71,8 @@
     },
 
     /** Speak `text` with the best Chinese voice. Resolves when the utterance ends. */
-    speakWithVoice(text, rate = 1) {
-      const voice = pickVoice(availableVoices());
+    speakWithVoice(text, rate = 1, language = 'zh') {
+      const voice = pickVoice(availableVoices(), language);
       if (!voice) return Promise.reject(new Error('no-voice'));
 
       stop();

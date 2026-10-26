@@ -245,7 +245,17 @@ test('real worker lookups and DOM hover render kana, inflections and no Chinese 
       return { reading: root.querySelector('.pinyin').textContent, senses: root.querySelector('.senses').textContent, actions: root.querySelectorAll('.speak, .anki-add').length,
         highlighted: [...CSS.highlights.get('zh-dic-match')][0].toString() };
     });
-    assert.equal(state.reading, 'たべる'); assert.match(state.senses, /to eat/); assert.equal(state.actions, 0);
+    assert.equal(state.reading, 'たべる'); assert.match(state.senses, /to eat/); assert.equal(state.actions, 1);
+    const playback = await page.evaluate(async () => {
+      let spoken;
+      zhDic.speech.voiceAvailable = language => language === 'ja';
+      zhDic.speech.speakWithVoice = async (text, rate, language) => { spoken = { text, language }; };
+      const root = [...document.querySelectorAll('[data-zh-dic-host]')].find(el => el.shadowRoot?.querySelector('.word')).shadowRoot;
+      root.querySelector('.speak').click();
+      await Promise.resolve();
+      return spoken;
+    });
+    assert.deepEqual(playback, { text: state.reading, language: 'ja' });
     assert.equal(state.highlighted, '食べました', 'highlight the inflection, not the shorter dictionary form');
     const kana = await page.evaluate(() => {
       const node = document.querySelector('#ja').firstChild;
@@ -342,13 +352,19 @@ test('Japanese export and duplicate checks use Yomi and never request Mandarin a
       const calls = [];
       const originalFetch = window.fetch;
       window.fetch = async (url, init) => {
+        if (String(url).startsWith('https://translate.google.com/translate_tts?')) {
+          const parsed = new URL(url);
+          if (parsed.searchParams.get('tl') !== 'ja') throw new Error('Wrong speech language');
+          calls.push({ action: 'japaneseSpeech', text: parsed.searchParams.get('q') });
+          return { ok: true, headers: { get: () => 'audio/mpeg' }, arrayBuffer: async () => new ArrayBuffer(2048) };
+        }
         if (url !== 'http://127.0.0.1:8765') throw new Error('Unexpected export fetch: ' + url);
         const { action, params } = JSON.parse(init.body);
         calls.push({ action, params });
         const answers = {
           deckNames: ['Japanese Mining'], modelNames: ['Yomi'],
           modelFieldNames: ['Expression', 'Meaning', 'Reading', 'Furigana', 'Audio', 'Manual examples', 'Examples', 'asdf'],
-          canAddNotesWithErrorDetail: [{ canAdd: false, error: 'duplicate' }], addNote: 123
+          canAddNotesWithErrorDetail: [{ canAdd: false, error: 'duplicate' }], addNote: 123, storeMediaFile: 'japanese.mp3'
         };
         return { ok: true, json: async () => ({ result: answers[action], error: null }) };
       };
@@ -366,13 +382,15 @@ test('Japanese export and duplicate checks use Yomi and never request Mandarin a
     assert.equal(result.inspect.result.states[0].duplicate, true);
     assert.equal(result.add.ok, true, result.add.error);
     assert.equal(result.add.result.deck, 'Japanese Mining');
-    assert.equal(result.add.result.audio, false);
+    assert.equal(result.add.result.audio, true);
     const inspected = result.calls.find(c => c.action === 'canAddNotesWithErrorDetail').params.notes[0];
     const added = result.calls.find(c => c.action === 'addNote').params.note;
     assert.equal(added.modelName, 'Yomi');
     assert.equal(added.fields.Reading, 'たべる');
-    assert.equal(added.fields.Audio, '');
-    assert.deepEqual(added.fields, inspected.fields);
+    assert.equal(added.fields.Audio, '[sound:japanese.mp3]');
+    assert.match(result.calls.find(c => c.action === 'storeMediaFile').params.filename, /_ja-JP\.mp3$/);
+    assert.equal(result.calls.filter(c => c.action === 'japaneseSpeech').length, 1);
+    assert.deepEqual({ ...added.fields, Audio: '' }, inspected.fields);
     assert.deepEqual(added.options, inspected.options);
     assert.deepEqual(errors, []);
   } finally { await context.close(); }

@@ -375,15 +375,15 @@ async function findRecording({ word, pinyin = '', simplified = '', traditional =
 }
 
 /** Synthesise `word`, or return a miss. Never throws: a failed fallback must not lose a note. */
-async function findSynthesised(word, { service, rate }) {
+async function findSynthesised(word, { service, rate, language = 'zh' }) {
   if (!service || service === 'off' || !word) return { found: false };
 
-  const key = `${service} ${word}`;
+  const key = `${language} ${service} ${rate} ${word}`;
   if (ttsCache.has(key)) return ttsCache.get(key);
 
   let result;
   try {
-    const audio = await synthesise(word, { service, rate });
+    const audio = await synthesise(word, { service, rate, language });
     result = audio
       ? { found: true, name: `${word}${audio.extension}`, mime: audio.mime, data: toBase64(audio.data), tts: service }
       : { found: false };
@@ -406,6 +406,8 @@ async function findSynthesised(word, { service, rate }) {
  */
 async function handleAudio({
   word,
+  reading = '',
+  language = 'zh',
   pinyin = '',
   simplified = '',
   traditional = '',
@@ -413,13 +415,14 @@ async function handleAudio({
   allowTts = true,
 }) {
   const settings = await getSettings();
-  const recording = allowRecording
+  const recording = allowRecording && language !== 'ja'
     ? await findRecording({ word, pinyin, simplified, traditional })
     : { found: false };
   if (recording.found || !allowTts) return recording;
 
-  const synthetic = await findSynthesised(word, {
-    service: settings.ttsService,
+  const synthetic = await findSynthesised(language === 'ja' ? reading || word : word, {
+    language,
+    service: language === 'ja' && settings.ttsService !== 'off' ? 'google' : settings.ttsService,
     rate: settings.speechRate,
   });
   // A recording error is the more useful one to report if neither source produced anything.
@@ -437,6 +440,8 @@ async function audioFor(card, settings) {
   if (!plan.recording && !plan.tts) return null;
 
   const result = await handleAudio({
+    language: card.language,
+    reading: card.reading,
     word: card.headword,
     pinyin: card.pinyin,
     simplified: card.simplified,
@@ -502,7 +507,7 @@ async function handleAnkiAdd({ card }) {
   // Only bother fetching audio when a field actually wants it.
   let audioFilename = '';
   let audioSource = '';
-  if (card.language !== 'ja' && Object.values(mapping).includes('audio')) {
+  if (Object.values(mapping).includes('audio')) {
     const audio = await audioFor(written, settings);
     if (audio) {
       const extension = audio.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.mp3';
@@ -511,7 +516,7 @@ async function handleAnkiAdd({ card }) {
       // replaced without guessing which files came from where.
       const provider = audio.tts ? audio.tts : 'commons';
       audioFilename = await anki.storeMedia(
-        `${written.headword}_miaoyixia_${provider}_zh-CN${extension}`,
+        `${written.headword}_miaoyixia_${provider}_${card.language === 'ja' ? 'ja-JP' : 'zh-CN'}${extension}`,
         audio.data,
       );
       audioSource = audio.tts ? 'tts' : 'recording';

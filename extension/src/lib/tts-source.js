@@ -50,12 +50,12 @@ export function refererFor(service) {
 }
 
 /** The URL that returns MP3 bytes for `text`, or '' if the service name isn't known. */
-export function ttsUrl(service, text, rate = 1) {
+export function ttsUrl(service, text, rate = 1, language = 'zh') {
   if (service === 'google') {
     const params = new URLSearchParams({
       ie: 'UTF-8',
       q: text,
-      tl: 'zh-CN',
+      tl: language === 'ja' ? 'ja' : 'zh-CN',
       client: 'tw-ob',
       // Google's own slow mode is a hard 0.3x, far below anything useful for a learner, so
       // playback speed is left to the player and only the neutral rendering is requested.
@@ -67,7 +67,7 @@ export function ttsUrl(service, text, rate = 1) {
     return `${GOOGLE}?${params}`;
   }
 
-  if (service === 'baidu') {
+  if (service === 'baidu' && language !== 'ja') {
     const params = new URLSearchParams({
       lan: 'zh',
       ie: 'UTF-8',
@@ -91,11 +91,11 @@ export function ttsUrl(service, text, rate = 1) {
  * @param {(url: string) => Promise<Response>} [options.fetchImpl] injected for testing
  * @returns {Promise<{data: ArrayBuffer, mime: string, extension: string, service: string}|null>}
  */
-export async function synthesise(text, { service, rate = 1, fetchImpl = fetch } = {}) {
+export async function synthesise(text, { service, rate = 1, language = 'zh', fetchImpl = fetch } = {}) {
   const word = String(text ?? '').trim();
   if (!word || [...word].length > MAX_CHARS) return null;
 
-  const url = ttsUrl(service, word, rate);
+  const url = ttsUrl(service, word, rate, language);
   if (!url) return null;
 
   // Each host wants to see its own page as the referrer -- sending Google's to Baidu gets a

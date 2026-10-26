@@ -187,7 +187,6 @@
      * whatever happens, so the source policy stays in content.js.
      */
     #renderSpeaker(card) {
-      if (card.language === 'ja') return null;
       if (this.#settings.audio === 'off' || !this.onPlay) return null;
 
       const button = document.createElement('button');

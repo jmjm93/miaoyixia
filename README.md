@@ -259,8 +259,7 @@ segmenter with those matches. This is intentionally a basic recogniser, not a fu
 grammar analyser: slang, complex conjugations and ambiguous splits can fail. Candidate tabs
 and the editable recognised line remain available.
 
-Japanese audio and sentence translation are not included in this preview;
-Japanese cards hide their audio buttons. Printed Japanese OCR is supported in both
+Japanese sentence translation is not included in this preview. Printed Japanese OCR is supported in both
 directions, but furigana, stylised manga lettering and complex column layouts need testing.
 
 Disabling Japanese returns the reading language to Chinese and keeps its download for reuse.
@@ -301,4 +300,4 @@ The separate **Anki — Japanese** section has its own **add to Anki** switch, *
 `Yomi`, using only Expression, Meaning, Reading, Audio, and Examples. Expression receives the
 dictionary headword, Meaning the definitions, and Reading the kana reading.
 Examples copies the sentence containing the word. Other Yomi fields are left empty.
-Japanese audio is not yet supported. Chinese settings remain independent.
+Japanese pronunciation uses an installed Japanese voice when available, with Google Japanese speech as the online fallback. Anki Audio uses Google Japanese speech. The shared audio source, synthesised fallback, and playback speed settings apply; recordings-only has no Japanese recordings. Chinese settings remain independent.

@@ -408,7 +408,7 @@ function createAnkiProfile(prefix) {
   const container = document.getElementById(prefix + 'Profile');
   const excludedTokens = prefix === 'anki'
     ? ['reading', 'furigana']
-    : ['simplified', 'traditional', 'colourHanzi', 'pinyin', 'colourPinyin', 'pinyinNumbered', 'audio'];
+    : ['simplified', 'traditional', 'colourHanzi', 'pinyin', 'colourPinyin', 'pinyinNumbered'];
   const tokens = TOKENS.filter((token) => !excludedTokens.includes(token.id));
   const ankiEl = {
     enabled: document.getElementById(prefix + 'Enabled'),

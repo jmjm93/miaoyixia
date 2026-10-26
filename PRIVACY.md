@@ -76,7 +76,7 @@ one is missing the extension can ask a text-to-speech service for the word inste
 *Synthesised fallback* selects, and it is set to **Google Translate** by default; **Baidu
 Translate** is the alternative, and **None** turns it off completely.
 
-What is sent is the single word, plus the fact that Mandarin audio is wanted for it. Nothing else
+What is sent is the single word, plus the requested pronunciation language (Mandarin or Japanese). Nothing else
 — no identifier, no page address, no reading, nothing about you. Both are requests to a public
 consumer endpoint of the kind a browser makes when you use those sites, and the operator's own
 privacy policy applies:
@@ -133,8 +133,11 @@ JMdict dictionary from a public GitHub release and two Japanese Tesseract langua
 ask to download. No Japanese dictionary or model downloads happen on installation, startup,
 hovering or capturing an image. Only public file requests are made: no word, sentence, image or
 page address is sent. Once downloaded, Japanese lookup and OCR work locally without a network
-connection. The Japanese preview has no pronunciation fetching, Anki export or sentence
-translation. [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+connection. Japanese pronunciation uses an installed Japanese voice, or sends the selected
+kana reading (or word) to Google for Japanese speech when you click the speaker or export
+a note with Audio enabled. This follows the audio settings described above. Japanese Anki
+export sends configured fields, including the sentence when mapped, to local AnkiConnect.
+Japanese sentence translation is not supported. [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
 applies to the download requests.
 
 ## What is never collected

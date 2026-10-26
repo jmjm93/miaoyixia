@@ -118,3 +118,12 @@ test('every advertised service actually builds a URL', () => {
     assert.ok(ttsUrl(service, '好'), `${service} builds no URL`);
   }
 });
+
+test('Japanese speech requests Japanese and never uses the Chinese-only Baidu path', async () => {
+  const url = new URL(ttsUrl('google', 'kana', 1, 'ja'));
+  assert.equal(url.searchParams.get('tl'), 'ja');
+  assert.equal(ttsUrl('baidu', 'kana', 1, 'ja'), '');
+  let requested;
+  await synthesise('kana', { service: 'google', language: 'ja', fetchImpl: async url => { requested = new URL(url); return mp3Response(); } });
+  assert.equal(requested.searchParams.get('tl'), 'ja');
+});

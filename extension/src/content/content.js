@@ -507,12 +507,13 @@
    * Throws a tagged Error the popup turns into a tooltip; see describePlaybackError.
    */
   async function playPronunciation(card) {
+    const language = card.language === 'ja' ? 'ja' : 'zh';
     const source = settings.audio;
     const rate = settings.speechRate;
 
     // 'voice' and 'auto' both start with the OS voice: instant, offline, every entry covered.
-    if (source !== 'recording' && zh.speech.voiceAvailable()) {
-      return zh.speech.speakWithVoice(card.headword, rate);
+    if (source !== 'recording' && zh.speech.voiceAvailable(language)) {
+      return zh.speech.speakWithVoice(card.reading || card.headword, rate, language);
     }
 
     // Both scripts are passed because Lingua Libre names its files in simplified even for words
@@ -521,6 +522,8 @@
     // characters. 'voice' skips Commons: it asked for a synthetic voice, not a real one.
     const result = await send({
       type: 'audio',
+      language,
+      reading: card.reading,
       word: card.headword,
       pinyin: card.pinyin,
       simplified: card.simplified,
