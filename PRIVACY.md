@@ -1,6 +1,6 @@
 # Privacy Policy — 瞄一下 (miaoyixia)
 
-**Last updated: 15 August 2026**
+**Last updated: 10 October 2026**
 
 **Short version: this extension collects nothing.** There is no analytics, no telemetry, no
 advertising, and no account. The page you are reading is never sent anywhere, and no record of
@@ -48,9 +48,14 @@ profile; the developer of this extension has no access to it.
 No browsing history, page content, or record of the words you look up is stored — not locally,
 not remotely.
 
+If you explicitly enable the optional Japanese preview, its downloaded dictionary and two OCR
+models are stored in local IndexedDB. They are not synced to other devices. Disabling Japanese
+keeps these files for reuse; **Remove** deletes them. Your enable/disable and reading-language
+preferences are settings saved with `storage.sync`, like the other preferences above.
+
 ## What leaves your device
 
-Five things, and none of them happen unless you ask for them:
+Six things, and none of them happen unless you ask for them:
 
 **1. Pronunciation recordings.** If you click the speaker button on an entry, or add a card with
 an audio field, the extension asks
@@ -121,6 +126,17 @@ this extension merely promising not to make it. Turning the setting back off sto
 Hovering, dictionary lookups and reading text from images are all unaffected either way: none of
 them ever touch the network.
 
+**6. Optional Japanese download.** Enabling/downloading Japanese in Options fetches a pinned English
+JMdict dictionary from a public GitHub release and two Japanese Tesseract language models from
+`raw.githubusercontent.com`, about 17 MB in total. GitHub's release download redirects to
+`release-assets.githubusercontent.com`. Access is an optional permission requested only when you
+ask to download. No Japanese dictionary or model downloads happen on installation, startup,
+hovering or capturing an image. Only public file requests are made: no word, sentence, image or
+page address is sent. Once downloaded, Japanese lookup and OCR work locally without a network
+connection. The Japanese preview has no pronunciation fetching, Anki export or sentence
+translation. [GitHub's privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+applies to the download requests.
+
 ## What is never collected
 
 - Analytics, usage statistics, crash reports or telemetry of any kind
@@ -145,6 +161,7 @@ as they would from anyone visiting them. If you would rather no word ever left y
 | Permission | Why |
 | --- | --- |
 | `storage` | Save the settings above |
+| `unlimitedStorage` | Keep optional downloaded definition and Japanese data packs locally |
 | `contextMenus` | The right-click menu on the extension's own toolbar button |
 | `activeTab` | Take a screenshot of the tab you are looking at, at the moment you click the toolbar button, so that text in an image can be read. It grants nothing at any other time, and the screenshot never leaves your device. |
 | `offscreen` | Run the bundled text recogniser in a hidden page of the extension's own. The background worker Chrome gives extensions is shut down too often to hold a recogniser this size. |
@@ -152,7 +169,8 @@ as they would from anyone visiting them. If you would rather no word ever left y
 | `commons.wikimedia.org`, `upload.wikimedia.org` | Download a human pronunciation recording of a word you asked to hear or to save |
 | `translate.google.com`, `fanyi.baidu.com` | Fetch a synthesised pronunciation of that word when no recording exists. Only the one you select as *Synthesised fallback* is ever contacted, and neither is if you set it to "None". |
 | `127.0.0.1:8765` (optional) | Send a flashcard to your own local Anki |
-| `raw.githubusercontent.com` (optional) | Download the Spanish definitions, once, if you ask for them |
+| `raw.githubusercontent.com` (optional) | Download the Spanish definitions or Japanese OCR models, only if you ask for them |
+| `github.com`, `release-assets.githubusercontent.com` (optional) | Download the Japanese dictionary when you explicitly enable/download Japanese |
 | `translate.googleapis.com` (optional) | Translate a sentence captured from an image, only if you turn *Translate the sentence* on |
 
 The extension requests no access to your browsing history, bookmarks, cookies or downloads, and

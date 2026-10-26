@@ -67,6 +67,7 @@
 
   /** The two things about a capture the user can be wrong about, and fix without re-snipping. */
   const CHOICES = [
+    { key: 'lookupLanguage', label: 'lookupLanguage', options: [['auto', 'readingAutomatic'], ['zh', 'readingChinese'], ['ja', 'readingJapanese']] },
     { key: 'ocrScript', label: 'ocrScript', options: [['simplified', 'scriptSimplified'], ['traditional', 'scriptTraditional']] },
     { key: 'ocrOrientation', label: 'ocrOrientation', options: [['horizontal', 'ocrHorizontal'], ['vertical', 'ocrVertical']] },
   ];
@@ -347,6 +348,12 @@
       // from the options page while this window is open.
       for (const select of this.#tuner.querySelectorAll('[data-setting]')) {
         select.value = this.#settings[select.dataset.setting] ?? select.options[0].value;
+        if (select.dataset.setting === 'lookupLanguage') {
+          select.querySelector('[value="ja"]').disabled = !this.#settings.japaneseEnabled;
+          select.querySelector('[value="auto"]').disabled = !this.#settings.japaneseEnabled;
+          select.closest('label').hidden = !this.#settings.japaneseEnabled;
+        }
+        if (select.dataset.setting === 'ocrScript') select.closest('label').hidden = this.#settings.japaneseEnabled && this.#settings.lookupLanguage === 'ja';
       }
     }
 

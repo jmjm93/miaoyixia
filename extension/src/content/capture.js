@@ -79,6 +79,7 @@
   zh.recognise = async function recognise(shot) {
     const response = await chrome.runtime.sendMessage({ type: 'recognise', dataUrl: shot.dataUrl });
     if (!response?.ok) throw new Error(response?.error ?? 'no response');
+    shot.language = response.result?.language;
     return response.result?.text ?? null;
   };
 })();

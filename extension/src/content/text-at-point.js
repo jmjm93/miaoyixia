@@ -19,6 +19,7 @@
   const NODE_SCAN_LIMIT = 400;
 
   const HAN = /\p{Script=Han}/u;
+  const JAPANESE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]/u;
   const SENTENCE_END = /[。！？；.!?;\n]/;
   // Elements whose text is never part of a word: ruby annotations carry pinyin above
   // the characters, and the rest simply aren't rendered prose.
@@ -158,10 +159,10 @@
   }
 
   /** The run of Han characters starting at the cursor -- what we actually look up. */
-  function forwardWord(after) {
+  function forwardWord(after, japanese = false) {
     let word = '';
     for (const ch of after) {
-      if (!isHan(ch) || word.length >= FORWARD_CHARS) break;
+      if (!(japanese ? JAPANESE.test(ch) : isHan(ch)) || word.length >= FORWARD_CHARS) break;
       word += ch;
     }
     return word;
@@ -190,12 +191,12 @@
    * @returns {null | {word: string, sentence: string, rect: DOMRect,
    *                   positions: Array<{node: Text, offset: number}>, key: string}}
    */
-  zh.resolveAtPoint = function resolveAtPoint(x, y) {
+  zh.resolveAtPoint = function resolveAtPoint(x, y, japanese = false) {
     const hit = characterAtPoint(x, y);
-    if (!hit || !isHan(hit.node.data[hit.offset])) return null;
+    if (!hit || !(japanese ? JAPANESE.test(hit.node.data[hit.offset]) : isHan(hit.node.data[hit.offset]))) return null;
 
     const { before, after, positions } = readBlock(hit);
-    const word = forwardWord(after);
+    const word = forwardWord(after, japanese);
     if (!word) return null;
 
     return {

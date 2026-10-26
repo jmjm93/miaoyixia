@@ -5,6 +5,8 @@
 
 /** Every model tools/fetch-ocr.mjs vendors. Nothing else may be asked for. */
 export const OCR_MODELS = ['chi_sim', 'chi_tra', 'chi_sim_vert', 'chi_tra_vert'];
+/** Not bundled: only usable after the user downloads the Japanese add-on. */
+export const JAPANESE_OCR_MODELS = ['jpn', 'jpn_vert'];
 
 /**
  * Captures smaller than this are doubled before recognition; larger ones are left alone.
@@ -28,7 +30,8 @@ export const OCR_ORIENTATIONS = ['horizontal', 'vertical'];
  * @param {{ocrScript?: string, ocrOrientation?: string}} settings
  * @returns {string} one of OCR_MODELS
  */
-export function ocrModel({ ocrScript, ocrOrientation } = {}) {
+export function ocrModel({ ocrScript, ocrOrientation, lookupLanguage, japaneseEnabled } = {}) {
+  if (lookupLanguage === 'ja' && japaneseEnabled) return ocrOrientation === 'vertical' ? 'jpn_vert' : 'jpn';
   const base = ocrScript === 'traditional' ? 'chi_tra' : 'chi_sim';
   return ocrOrientation === 'vertical' ? `${base}_vert` : base;
 }

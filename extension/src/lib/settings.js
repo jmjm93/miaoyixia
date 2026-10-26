@@ -3,6 +3,7 @@
 // so no migration is needed when a new setting is added.
 
 import { setLanguage } from './i18n.js';
+import { japaneseReady } from './japanese-store.js';
 
 /**
  * Modifier that must be held while hovering, or 'none' to look up on hover alone.
@@ -15,6 +16,10 @@ export const HOVER_ONLY = 'none';
 
 export const DEFAULT_SETTINGS = {
   enabled: true,
+  /** Optional local Japanese dictionary and OCR data, downloaded only after opting in. */
+  japaneseEnabled: false,
+  /** zh, ja or auto; independent of the interface and definition languages. */
+  lookupLanguage: 'zh',
   /**
    * Language of the extension's own text -- the options page, the popup and the toolbar menu.
    * 'auto' follows the browser's UI language; see messages.js for the codes.
@@ -117,6 +122,13 @@ export const DEFAULT_SETTINGS = {
    * options page. Whatever is configured gets created on first use if it doesn't exist.
    */
   ankiEnabled: false,
+  japaneseAnkiEnabled: false,
+  japaneseAnkiDeck: 'Japanese Mining',
+  japaneseAnkiModel: 'Yomi',
+  japaneseAnkiFields: {
+    Expression: 'headword', Meaning: 'senses', Reading: 'reading', Audio: 'none', Examples: 'sentence',
+  },
+  japaneseAnkiTags: 'miao-yixia',
   ankiDeck: 'Mandarin::Chinese Mining',
   ankiModel: 'Chinese (Basic)',
   /**
@@ -159,6 +171,10 @@ export const DEFAULT_SETTINGS = {
  */
 export async function getSettings() {
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  // Synced preferences do not imply a download on this device. Stay in Chinese until
+  // the local pack exists; this check reads storage only and never fetches anything.
+  if (settings.japaneseEnabled && !(await japaneseReady().catch(() => false))) settings.japaneseEnabled = false;
+  if (!settings.japaneseEnabled) settings.lookupLanguage = 'zh';
   setLanguage(settings.uiLanguage);
   return settings;
 }
@@ -188,4 +204,12 @@ export function exportAudioPlan(audio) {
     default:
       return { recording: true, tts: true };
   }
+}
+
+/** Independent export profile; existing Chinese preferences retain their keys. */
+export function ankiSettings(settings, language) {
+  if (language !== 'ja') return settings;
+  return { ...settings, ankiEnabled: settings.japaneseAnkiEnabled,
+    ankiDeck: settings.japaneseAnkiDeck, ankiModel: settings.japaneseAnkiModel,
+    ankiFields: settings.japaneseAnkiFields, ankiTags: settings.japaneseAnkiTags };
 }

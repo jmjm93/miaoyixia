@@ -483,3 +483,23 @@ test('a downloaded layer that is not in use can be removed', async () => {
   assert.deepEqual(failures, [], 'unexpected page errors');
   await page.close();
 });
+
+test('Japanese Anki settings and mappings persist independently from Chinese', async () => {
+  const { page, failures } = await openOptions({ audio: 'off', voices: [], store: { japaneseAnkiEnabled: true } });
+  try {
+    assert.equal(await page.$eval('#japaneseAnkiDeck', el => el.value), 'Japanese Mining');
+    assert.equal(await page.$eval('#japaneseAnkiModel', el => el.value), 'Yomi');
+    await page.waitForFunction(() => document.querySelectorAll('#japaneseAnkiFieldsTable select').length === 5);
+    const tokens = await page.$eval('#japaneseAnkiFieldsTable select', el => [...el.options].map(o => o.value));
+    assert.ok(tokens.includes('reading'));
+    assert.ok(!tokens.includes('pinyin'));
+    await page.$eval('#japaneseAnkiDeck', el => { el.value = 'My Japanese'; el.dispatchEvent(new Event('input')); });
+    await page.select('#japaneseAnkiFieldsTable select', 'reading');
+    const store = await page.evaluate(() => window.__store);
+    assert.equal(store.japaneseAnkiDeck, 'My Japanese');
+    assert.equal(store.japaneseAnkiFields.Expression, 'reading');
+    assert.equal(store.ankiDeck, undefined);
+    assert.equal(store.ankiFields, undefined);
+    assert.deepEqual(failures, []);
+  } finally { await page.close(); }
+});

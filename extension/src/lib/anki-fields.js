@@ -9,7 +9,7 @@ import { t } from './i18n.js';
 
 /** Anki fields are HTML, so anything derived from dictionary text has to be escaped. */
 export function escapeHtml(text) {
-  return String(text)
+  return String(text ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -76,6 +76,9 @@ export const TOKENS = [
   { id: 'simplified', labelKey: 'tokenSimplified', render: (c) => escapeHtml(c.simplified) },
   { id: 'traditional', labelKey: 'tokenTraditional', render: (c) => escapeHtml(c.traditional) },
   { id: 'colourHanzi', labelKey: 'tokenColourHanzi', render: colouredHanzi },
+  { id: 'reading', labelKey: 'tokenReading', render: (c) => escapeHtml(c.reading ?? c.pinyin) },
+  { id: 'furigana', labelKey: 'tokenFurigana', render: (c) => c.reading && c.reading !== c.headword
+    ? `<ruby>${escapeHtml(c.headword)}<rt>${escapeHtml(c.reading)}</rt></ruby>` : escapeHtml(c.headword) },
   { id: 'pinyin', labelKey: 'tokenPinyin', render: (c) => escapeHtml(c.pinyin) },
   { id: 'colourPinyin', labelKey: 'tokenColourPinyin', render: colouredPinyin },
   { id: 'pinyinNumbered', labelKey: 'tokenPinyinNumbered', render: (c) => escapeHtml(c.pinyinNumbered) },

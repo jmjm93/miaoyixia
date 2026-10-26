@@ -114,6 +114,11 @@ input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
+select:disabled {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
 output {
   min-width: 2ch;
   font-variant-numeric: tabular-nums;

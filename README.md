@@ -231,6 +231,52 @@ Key names — <kbd>Shift</kbd>, <kbd>Ctrl</kbd>, <kbd>Alt</kbd> — are delibera
 everywhere, since they're what's printed on the keyboard and they're also the exact
 `KeyboardEvent.key` values the trigger is compared against.
 
+## Japanese add-on (preview)
+
+Chinese remains the default. **Enable Japanese** in Options downloads an English JMdict
+dictionary and the horizontal/vertical Japanese OCR models once, after requesting access
+to GitHub. No Japanese dictionary or models are bundled, and nothing Japanese is downloaded
+on installation, startup, hovering, or snipping. The data stays in local IndexedDB.
+
+After downloading, choose **Reading language → Japanese** in Options or in the capture
+window's gear. This selects Japanese for both hovering and OCR; Chinese is still available
+with one switch. **Text direction** applies to either language; **Script in images** applies
+only to Chinese. Japanese dictionary definitions are English in this preview, independently
+of the Chinese **Definitions** setting.
+
+**Reading language → Automatic** chooses the hover dictionary from the surrounding sentence,
+using kana, Chinese language clues and dictionary coverage. Ambiguous shared words fall back
+to Chinese. Captures try both local OCR models and compare language evidence, dictionary
+coverage and recognition confidence, so Automatic takes longer. Choose **Chinese** or
+**Japanese** to override detection, including from the capture window's gear. Automatic
+requires the enabled Japanese add-on and sends no text or images to a detection service.
+
+Japanese lookup accepts kanji, hiragana and katakana. It uses dictionary prefixes and a
+small set of conjugation rules for polite, negative, past, te and progressive forms, with
+dictionary part-of-speech checks. For example, 食べました finds 食べる with its kana reading,
+while highlighting the full form on the page. OCR sentences use the existing shortest-path
+segmenter with those matches. This is intentionally a basic recogniser, not a full Japanese
+grammar analyser: slang, complex conjugations and ambiguous splits can fail. Candidate tabs
+and the editable recognised line remain available.
+
+Japanese audio and sentence translation are not included in this preview;
+Japanese cards hide their audio buttons. Printed Japanese OCR is supported in both
+directions, but furigana, stylised manga lettering and complex column layouts need testing.
+
+Disabling Japanese returns the reading language to Chinese and keeps its download for reuse.
+**Remove** disables it and deletes the local dictionary and both models. Settings sync between
+Chrome installations, but downloaded data does not: enable/download separately on each device.
+
+Dictionary data: [JMdict / EDRDG](https://www.edrdg.org/), copyright James William Breen and
+the Electronic Dictionary Research and Development Group, under
+[CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html), distributed through a pinned
+[jmdict-simplified](https://github.com/scriptin/jmdict-simplified) English release.
+OCR models: [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast), Apache-2.0.
+See [Japanese data notices](extension/JAPANESE-NOTICES.md).
+
+Developers can explicitly run `node tools/verify-japanese.mjs` to check the real downloads.
+It writes only to gitignored `vendor/japanese/`; build and packaging never fetch Japanese.
+
 ## Known limitations
 
 - Only Han characters are read, so words mixing letters (`卡拉OK`, `AA制`) match just
@@ -247,3 +293,12 @@ everywhere, since they're what's printed on the keyboard and they're also the ex
   doesn't reliably provide.
 - Wikimedia rate-limits bursts, which is why recordings are fetched only on click, never
   prefetched on hover, and both hits and misses are cached for the session.
+
+### Japanese Anki settings
+
+The separate **Anki — Japanese** section has its own **add to Anki** switch, **Deck**,
+**Note type**, **Tags**, and **Fields** mappings. It defaults to `Japanese Mining` and
+`Yomi`, using only Expression, Meaning, Reading, Audio, and Examples. Expression receives the
+dictionary headword, Meaning the definitions, and Reading the kana reading.
+Examples copies the sentence containing the word. Other Yomi fields are left empty.
+Japanese audio is not yet supported. Chinese settings remain independent.

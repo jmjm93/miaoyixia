@@ -9,13 +9,30 @@ import { segment } from '../lib/segment.js';
 import { ocrModel } from '../lib/ocr.js';
 import { applyScript, buildCard } from '../lib/card.js';
 import { clearGlosses, glossFor, glossInfo, glossReady, resetGlossReady } from '../lib/gloss-store.js';
-import { exportAudioPlan, getSettings } from '../lib/settings.js';
+import { ankiSettings, exportAudioPlan, getSettings } from '../lib/settings.js';
 import { fileUrl, searchForms, searchRecordings } from '../lib/audio-source.js';
 import { synthesise } from '../lib/tts-source.js';
 import { createClient, ensureTarget, noteOptions, reconcileMapping } from '../lib/anki.js';
 import { buildFields } from '../lib/anki-fields.js';
 import { MENU, actionTitle, iconPaths, menuState, rememberModifier, trigger } from '../lib/action-state.js';
 import { t } from '../lib/i18n.js';
+import { buildJapaneseCard } from '../lib/japanese.js';
+import { lookupJapanese, japaneseMatchesByPosition, japaneseReady, resetJapaneseCache } from '../lib/japanese-store.js';
+import { languageEvidence, dictionaryCoverage } from '../lib/reading-language.js';
+
+async function readingLanguage(settings, text = '') {
+  if (!settings.japaneseEnabled) return 'zh';
+  if (settings.lookupLanguage !== 'auto') return settings.lookupLanguage === 'ja' ? 'ja' : 'zh';
+  const evidence = languageEvidence(text);
+  if (evidence) return evidence;
+  if (!text.trim()) return 'zh';
+  const [zh, ja] = await Promise.all([matchesByPosition(text), japaneseMatchesByPosition(text)]);
+  // A meaningful margin avoids switching on a single shared word or a small dictionary difference.
+  return dictionaryCoverage(text, ja) > dictionaryCoverage(text, zh) + 0.2 ? 'ja' : 'zh';
+}
+const japaneseCandidates = (matches, context) => matches.map(({ headword, length, entries }) => ({
+  headword, length, cards: entries.map((row) => buildJapaneseCard(headword, row, context)),
+}));
 
 /**
  * Recordings fetched this session, keyed by word+reading. Misses are cached too: Commons
@@ -65,7 +82,11 @@ async function glossState(settings) {
 }
 
 async function handleLookup({ text, sentence, url, title }) {
-  const [settings, matches] = await Promise.all([getSettings(), lookupCandidates(text ?? '')]);
+  const settings = await getSettings();
+  if (await readingLanguage(settings, sentence || text) === 'ja') {
+    return { candidates: japaneseCandidates(await lookupJapanese(text ?? ''), { sentence, url, title }), glossPending: false };
+  }
+  const matches = await lookupCandidates(text ?? '');
   const { lang, translating, glossPending } = await glossState(settings);
 
   // Every candidate for one hover starts with the same character, so all of these resolve
@@ -88,11 +109,14 @@ async function handleLookup({ text, sentence, url, title }) {
  * The whole line travels as the sentence for every card, so a note made from one word still
  * records the context it was read in.
  */
-async function handleRead({ text, url, title }) {
+async function handleRead({ text, url, title, language }) {
   const line = text ?? '';
   const chars = [...line];
-  const [settings, matchesAt] = await Promise.all([getSettings(), matchesByPosition(line)]);
-  const { lang, translating, glossPending } = await glossState(settings);
+  const settings = await getSettings();
+  const japanese = settings.japaneseEnabled && settings.lookupLanguage === 'auto' && ['zh', 'ja'].includes(language)
+    ? language === 'ja' : await readingLanguage(settings, line) === 'ja';
+  const matchesAt = await (japanese ? japaneseMatchesByPosition(line) : matchesByPosition(line));
+  const { lang, translating, glossPending } = japanese ? { glossPending: false } : await glossState(settings);
 
   const context = { sentence: line, url, title };
   const spans = segment(
@@ -105,7 +129,7 @@ async function handleRead({ text, url, title }) {
       text: chars.slice(start, start + length).join(''),
       start,
       length,
-      candidates: await buildCandidates(matchesAt[start] ?? [], context, lang, translating),
+      candidates: japanese ? japaneseCandidates(matchesAt[start] ?? [], context) : await buildCandidates(matchesAt[start] ?? [], context, lang, translating),
     })),
   );
 
@@ -180,14 +204,31 @@ async function handleRecognise({ dataUrl }) {
   // Read fresh every time rather than caching: the result window can change the script and
   // direction and ask to be read again, without a new snip.
   const settings = await getSettings();
+  if (settings.japaneseEnabled && !(await japaneseReady())) throw new Error('Japanese has not been downloaded; enable it in Options');
   await ensureRecogniser();
-  const response = await chrome.runtime.sendMessage({
-    type: 'ocr:run',
-    dataUrl,
-    model: ocrModel(settings),
-  });
-  if (!response?.ok) throw new Error(response?.error ?? 'the recogniser did not answer');
-  return response.result;
+  const recognise = async (language) => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'ocr:run',
+      dataUrl,
+      model: ocrModel({ ...settings, lookupLanguage: language }),
+    });
+    if (!response?.ok) throw new Error(response?.error ?? 'the recogniser did not answer');
+    return { ...response.result, language };
+  };
+  if (settings.lookupLanguage !== 'auto' || !settings.japaneseEnabled) return recognise(settings.lookupLanguage);
+  // Sequential recognition bounds peak CPU use and reuses the existing local workers.
+  const chinese = await recognise('zh');
+  const japanese = await recognise('ja');
+  const score = async (result, language) => {
+    const text = result.text ?? '';
+    if (!text) return -1;
+    const evidence = languageEvidence(text);
+    const matches = await (language === 'ja' ? japaneseMatchesByPosition(text) : matchesByPosition(text));
+    return dictionaryCoverage(text, matches) + (result.confidence ?? 0) / 100
+      + (evidence === language ? 1 : evidence ? -1 : 0);
+  };
+  const [zhScore, jaScore] = await Promise.all([score(chinese, 'zh'), score(japanese, 'ja')]);
+  return jaScore > zhScore + 0.2 ? japanese : chinese;
 }
 
 /**
@@ -222,8 +263,11 @@ export const TRANSLATE_ORIGINS = ['https://translate.googleapis.com/*'];
  * Answers `{ text: null }` rather than throwing when it is simply switched off, since the
  * content script calls this on every reading and "not enabled" is not an error.
  */
-async function handleTranslate({ text }) {
+async function handleTranslate({ text, language }) {
   const settings = await getSettings();
+  // First Japanese release supports local OCR and lookup only.
+  if (settings.japaneseEnabled && settings.lookupLanguage === 'auto' && language === 'ja') return { text: null };
+  if (await readingLanguage(settings, text) === 'ja') return { text: null };
   if (settings.translation !== 'google' || !text) return { text: null };
 
   if (!(await chrome.permissions.contains({ origins: TRANSLATE_ORIGINS }))) {
@@ -421,7 +465,7 @@ async function handleAnkiFields({ model }) {
  * creation happens on the click.
  */
 async function handleAnkiInspect({ cards }) {
-  const settings = await getSettings();
+  const settings = ankiSettings(await getSettings(), cards[0]?.language);
   const [decks, models] = await Promise.all([anki.deckNames(), anki.modelNames()]);
 
   if (!decks.includes(settings.ankiDeck) || !models.includes(settings.ankiModel)) {
@@ -444,7 +488,7 @@ async function handleAnkiInspect({ cards }) {
 
 /** Add one note, creating the deck and note type first if they're missing. */
 async function handleAnkiAdd({ card }) {
-  const settings = await getSettings();
+  const settings = ankiSettings(await getSettings(), card.language);
   const created = await ensureTarget(anki, {
     deck: settings.ankiDeck,
     model: settings.ankiModel,
@@ -458,7 +502,7 @@ async function handleAnkiAdd({ card }) {
   // Only bother fetching audio when a field actually wants it.
   let audioFilename = '';
   let audioSource = '';
-  if (Object.values(mapping).includes('audio')) {
+  if (card.language !== 'ja' && Object.values(mapping).includes('audio')) {
     const audio = await audioFor(written, settings);
     if (audio) {
       const extension = audio.name.match(/\.[a-z0-9]+$/i)?.[0] ?? '.mp3';
@@ -486,6 +530,14 @@ async function handleAnkiAdd({ card }) {
 }
 
 const HANDLERS = {
+  japaneseChanged: async () => {
+    resetJapaneseCache();
+    // A locally installed pack may correspond to an already-synced enabled preference.
+    // Notify existing tabs even when storage.sync.set() would write the same value.
+    const tabs = await chrome.tabs.query?.({}) ?? [];
+    await Promise.allSettled(tabs.map((tab) => chrome.tabs.sendMessage(tab.id, { type: 'japaneseChanged' })));
+    return null;
+  },
   lookup: handleLookup,
   read: handleRead,
   capture: handleCapture,

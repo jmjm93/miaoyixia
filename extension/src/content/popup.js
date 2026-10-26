@@ -148,7 +148,7 @@
       // English is what CC-CEDICT ships, so a card being "untranslated" is the normal state
       // rather than a shortfall -- there is nothing to fall back *from*. Without this the badge
       // appears for every lookup the moment definitions are set to English.
-      if ((this.#settings?.glossLanguage ?? 'en') === 'en') {
+      if (this.#view.activeCandidate?.cards[0]?.language === 'ja' || (this.#settings?.glossLanguage ?? 'en') === 'en') {
         this.#warn.hidden = true;
         return;
       }

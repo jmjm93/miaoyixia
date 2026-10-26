@@ -15,7 +15,7 @@ import {
   sentenceWithWordBold,
 } from '../extension/src/lib/anki-fields.js';
 import { createClient, ensureTarget, noteOptions, reconcileMapping } from '../extension/src/lib/anki.js';
-import { DEFAULT_SETTINGS } from '../extension/src/lib/settings.js';
+import { DEFAULT_SETTINGS, ankiSettings } from '../extension/src/lib/settings.js';
 
 installDictStub();
 
@@ -212,4 +212,24 @@ test('an unreachable Anki surfaces as a typed error, not a silent failure', asyn
     throw new Error('Failed to fetch');
   });
   await assert.rejects(() => client.version(), /Failed to fetch/);
+});
+
+test('Japanese Yomi defaults export the word fields and sentence example', () => {
+  const profile = ankiSettings(DEFAULT_SETTINGS, 'ja');
+  assert.equal(profile.ankiDeck, 'Japanese Mining');
+  assert.equal(profile.ankiModel, 'Yomi');
+  assert.equal(ankiSettings(DEFAULT_SETTINGS, 'zh'), DEFAULT_SETTINGS);
+  const fields = buildFields(profile.ankiFields, {
+    language: 'ja', headword: '食べる', reading: 'たべる', hovered: '食べました',
+    senses: ['to eat <food>'], sentence: '私は食べました。'
+  });
+  assert.equal(fields.Expression, '食べる');
+  assert.equal(fields.Reading, 'たべる');
+  assert.equal(fields.Meaning, 'to eat &lt;food&gt;');
+  assert.deepEqual(Object.keys(fields), ['Expression', 'Meaning', 'Reading', 'Audio', 'Examples']);
+  assert.equal(fields.Audio, '');
+  assert.equal(fields.asdf, undefined);
+  assert.equal(fields.Examples, '\u79c1\u306f\u98df\u3079\u307e\u3057\u305f\u3002');
+  assert.equal(fields['Manual examples'], undefined);
+  assert.equal(fields.Furigana, undefined);
 });

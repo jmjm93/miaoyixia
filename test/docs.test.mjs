@@ -24,6 +24,8 @@ const INTERNAL = new Set(['lastModifier']);
 /** The README phrase that documents each user-facing setting. */
 const DOCUMENTED_AS = {
   enabled: 'Enabled',
+  japaneseEnabled: 'Enable Japanese',
+  lookupLanguage: 'Reading language',
   uiLanguage: 'Language',
   glossLanguage: 'Definitions',
   triggerKey: 'Trigger',
@@ -35,6 +37,11 @@ const DOCUMENTED_AS = {
   audio: 'Audio source',
   ttsService: 'Synthesised fallback',
   speechRate: 'Playback speed',
+  japaneseAnkiEnabled: 'add to Anki',
+  japaneseAnkiDeck: 'Deck',
+  japaneseAnkiModel: 'Note type',
+  japaneseAnkiFields: 'Fields',
+  japaneseAnkiTags: 'Tags',
   ankiEnabled: 'add to Anki',
   ankiDeck: 'Deck',
   ankiModel: 'Note type',
@@ -47,7 +54,7 @@ const DOCUMENTED_AS = {
 };
 
 /** ankiFields is a table generated from the collection, not a single element. */
-const GENERATED = new Set(['ankiFields']);
+const GENERATED = new Set(['ankiFields', 'japaneseAnkiFields']);
 
 test('every user-facing setting has a control on the options page', () => {
   for (const key of Object.keys(DEFAULT_SETTINGS)) {

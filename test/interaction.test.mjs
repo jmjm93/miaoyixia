@@ -1741,7 +1741,7 @@ test('the result window is translated, and stays translated when the language ch
 
   const labels = () =>
     inResult(page, (root) => ({
-      rows: [...root.querySelectorAll('.tuner-row > span')].map((s) => s.textContent),
+      rows: [...root.querySelectorAll('.tuner-row:not([hidden]) > span')].map((s) => s.textContent),
       options: [...root.querySelectorAll('[data-setting="ocrScript"] option')].map((o) => o.textContent),
       gear: root.querySelector('.shot-tune').title,
       alt: root.querySelector('.shot-image').alt,

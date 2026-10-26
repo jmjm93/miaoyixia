@@ -153,12 +153,17 @@
     // its permissions comes from -- so the snip cannot begin anywhere else.
     chrome.runtime.onMessage.addListener((message) => {
       if (message?.type === 'snip') beginSnip();
+      if (message?.type === 'japaneseChanged') refreshReadingSettings();
       return false; // nothing to answer, and the sender isn't waiting
     });
 
-    chrome.storage.onChanged.addListener((changes, area) => {
+    chrome.storage.onChanged.addListener(async (changes, area) => {
       if (area !== 'sync') return;
       for (const [key, { newValue }] of Object.entries(changes)) settings[key] = newValue;
+      if (changes.japaneseEnabled || changes.lookupLanguage) {
+        try { Object.assign(settings, await send({ type: 'getSettings' })); }
+        catch (error) { console.debug('[zh-dic] could not refresh reading settings', error); }
+      }
       // Before updateSettings, which re-renders the hint bar in whatever language is active.
       if (changes.uiLanguage) setLanguage(settings.uiLanguage);
       popup.updateSettings(settings);
@@ -166,11 +171,22 @@
 
       // Switching trigger mid-session leaves a popup that belongs to the old mode, and a
       // held-key flag for a key we're no longer watching.
-      if (changes.triggerKey || !settings.enabled) {
+      if (changes.triggerKey || changes.lookupLanguage || changes.japaneseEnabled || !settings.enabled) {
         triggerHeld = false;
         dismiss();
       }
+      if ((changes.lookupLanguage || changes.japaneseEnabled) && result.visible && !result.tuning) rereadSnip();
     });
+  }
+
+  async function refreshReadingSettings() {
+    try {
+      Object.assign(settings, await send({ type: 'getSettings' }));
+      popup.updateSettings(settings);
+      result.updateSettings(settings);
+      dismiss();
+      if (result.visible && !result.tuning) rereadSnip();
+    } catch (error) { console.debug('[zh-dic] could not refresh the Japanese add-on', error); }
   }
 
   // --- events ------------------------------------------------------------------
@@ -392,7 +408,7 @@
   function lookupAtPointer() {
     if (!settings.enabled) return;
 
-    const hit = zh.resolveAtPoint(pointer.x, pointer.y);
+    const hit = zh.resolveAtPoint(pointer.x, pointer.y, settings.japaneseEnabled && settings.lookupLanguage !== 'zh');
     if (!hit) {
       leaveText();
       return;
@@ -567,7 +583,7 @@
       return;
     }
 
-    await lookupLine(text);
+    await lookupLine(text, shot.language);
   }
 
   /**
@@ -578,10 +594,11 @@
    * for a lookup here is what made a sentence answer only for its first word. The line itself
    * becomes the sentence on every card it produces.
    */
-  async function lookupLine(text) {
+  async function lookupLine(text, language) {
     const reading = await send({
       type: 'read',
       text,
+      language,
       url: location.href,
       title: document.title,
     });
@@ -589,7 +606,7 @@
 
     // Not awaited: the reading is already on screen and useful, and a translation is a network
     // round trip that must not hold it up. Answers nothing at all when the setting is off.
-    translateLine(text);
+    translateLine(text, language);
   }
 
   /**
@@ -598,10 +615,10 @@
    * Failure is logged and dropped rather than surfaced. It is a convenience on top of a lookup
    * that already worked, and the endpoint is a public one that can rate-limit at any time.
    */
-  async function translateLine(text) {
+  async function translateLine(text, language) {
     result.setTranslation('');
     try {
-      const { text: translated } = await send({ type: 'translate', text });
+      const { text: translated } = await send({ type: 'translate', text, language });
       // The window may have been closed, re-snipped or re-edited while this was in flight.
       if (translated && result.visible && result.line === text) result.setTranslation(translated);
     } catch (error) {
@@ -688,7 +705,7 @@
    * costs nothing but a button that stays enabled until the answer lands.
    */
   async function inspectAnkiInto(surface, candidate, isStale = () => false) {
-    if (!settings.ankiEnabled) return;
+    if (!(candidate.cards[0]?.language === 'ja' ? settings.japaneseAnkiEnabled : settings.ankiEnabled)) return;
 
     try {
       const states = await send({ type: 'ankiInspect', cards: candidate.cards });

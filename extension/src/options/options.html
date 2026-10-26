@@ -83,6 +83,44 @@
         </label>
       </section>
 
+      <h2 data-i18n="lookupLanguage">Reading language</h2>
+      <section>
+        <label class="row">
+          <span>
+            <span data-i18n="lookupLanguage">Reading language</span>
+            <small data-i18n="lookupLanguageHint">Language for webpage lookups and text recognition in captures. Only available when using Japanese as well.</small>
+          </span>
+          <select id="lookupLanguage" disabled>
+            <option value="auto" data-i18n="readingAutomatic">Automatic</option>
+            <option value="zh" data-i18n="readingChinese">Chinese</option>
+            <option value="ja" data-i18n="readingJapanese">Japanese</option>
+          </select>
+        </label>
+      </section>
+
+      <h2 data-i18n="japaneseHeading">Japanese add-on (preview)</h2>
+      <section>
+        <label class="row switch">
+          <input type="checkbox" id="japaneseEnabled" />
+          <span><span data-i18n="japaneseEnabled">Enable Japanese</span>
+            <small data-i18n="japaneseHint">Downloads the dictionary and OCR models once. Chinese stays the default.</small></span>
+        </label>
+        <div class="row">
+          <span id="japaneseStatus" role="status" aria-live="polite"></span>
+          <span class="control">
+            <button type="button" id="japaneseDownload" data-i18n="glossDownload">Download</button>
+            <button type="button" id="japaneseRemove" data-i18n="glossRemove">Remove</button>
+          </span>
+        </div>
+        <p class="credit" data-i18n="japanesePreview">Japanese preview: English definitions, basic conjugations, and horizontal/vertical OCR. Audio and sentence translation are not supported yet.</p>
+        <p class="credit">
+          <a href="https://www.edrdg.org/" target="_blank" rel="noreferrer">JMdict / EDRDG</a> ·
+          <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noreferrer">CC BY-SA 4.0</a> ·
+          <a href="https://github.com/scriptin/jmdict-simplified" target="_blank" rel="noreferrer">jmdict-simplified</a> ·
+          <a href="https://github.com/tesseract-ocr/tessdata_fast" target="_blank" rel="noreferrer">Tesseract models (Apache-2.0)</a>
+        </p>
+      </section>
+
       <h2 data-i18n="ocrHeading">Text in images</h2>
       <section>
         <label class="row">
@@ -181,7 +219,8 @@
         <p id="voiceHelpNote"></p>
       </details>
 
-      <h2>Anki</h2>
+<div id="ankiProfile">
+      <h2 data-i18n="ankiChinese">Anki — Chinese</h2>
       <section>
         <label class="row switch">
           <input type="checkbox" id="ankiEnabled" />
@@ -257,6 +296,72 @@
       </p>
       <table class="fields" id="ankiFieldsTable"><tbody></tbody></table>
 
+</div>
+<div id="japaneseAnkiProfile">
+      <h2 data-i18n="ankiJapanese">Anki — Japanese</h2>
+      <section>
+        <label class="row switch">
+          <input type="checkbox" id="japaneseAnkiEnabled" />
+          <span>
+            <span data-i18n="ankiEnabled">Show an “add to Anki” button</span>
+            <small data-i18n="ankiEnabledHint">Needs Anki running with the AnkiConnect add-on</small>
+          </span>
+        </label>
+
+        <div class="row" id="japaneseAnkiPermissionRow">
+          <span>
+            <span data-i18n="localAccess">Local access</span>
+            <small id="japaneseAnkiPermissionState" data-i18n="notGranted">Not granted</small>
+          </span>
+          <button type="button" id="japaneseAnkiGrant" data-i18n="grant">Grant</button>
+        </div>
+
+        <div class="row" id="japaneseAnkiStatusRow">
+          <span>
+            <span data-i18n="connection">Connection</span>
+            <small id="japaneseAnkiStatus" data-i18n="notChecked">Not checked</small>
+          </span>
+          <button type="button" id="japaneseAnkiRetry" data-i18n="check">Check</button>
+        </div>
+
+        <label class="row">
+          <span>
+            <span data-i18n="deck">Deck</span>
+            <small data-i18n="deckHint">Created automatically if it doesn’t exist yet</small>
+          </span>
+          <span class="control">
+            <input type="text" id="japaneseAnkiDeck" list="japaneseAnkiDeckList" spellcheck="false" />
+            <datalist id="japaneseAnkiDeckList"></datalist>
+          </span>
+        </label>
+
+        <label class="row">
+          <span>
+            <span data-i18n="noteType">Note type</span>
+            <small data-i18n="japaneseNoteTypeHint">Created automatically if it does not exist yet</small>
+          </span>
+          <span class="control">
+            <input type="text" id="japaneseAnkiModel" list="japaneseAnkiModelList" spellcheck="false" />
+            <datalist id="japaneseAnkiModelList"></datalist>
+          </span>
+        </label>
+
+        <label class="row">
+          <span data-i18n="tags">Tags</span>
+          <span class="control">
+            <input type="text" id="japaneseAnkiTags" spellcheck="false" />
+          </span>
+        </label>
+      </section>
+
+      <h3 data-i18n="fields">Fields</h3>
+      <p class="meta" id="japaneseAnkiFieldsNote" data-i18n="fieldsNote">
+        Choose what goes in each field of your note type. Read from your collection, so any
+        naming works.
+      </p>
+      <table class="fields" id="japaneseAnkiFieldsTable"><tbody></tbody></table>
+
+</div>
       <h2 data-i18n="appearance">Appearance</h2>
       <section>
         <label class="row">

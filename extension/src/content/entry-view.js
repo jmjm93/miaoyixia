@@ -187,6 +187,7 @@
      * whatever happens, so the source policy stays in content.js.
      */
     #renderSpeaker(card) {
+      if (card.language === 'ja') return null;
       if (this.#settings.audio === 'off' || !this.onPlay) return null;
 
       const button = document.createElement('button');
@@ -230,7 +231,7 @@
      * check is a round trip, and blocking the render on it would undo the latency work.
      */
     #renderAddButton(card, index) {
-      if (!this.#settings.ankiEnabled || !this.onAdd) return null;
+      if (!(card.language === 'ja' ? this.#settings.japaneseAnkiEnabled : this.#settings.ankiEnabled) || !this.onAdd) return null;
 
       const button = document.createElement('button');
       button.className = 'anki-add';
@@ -278,7 +279,7 @@
       head.className = 'head';
 
       const { script } = this.#settings;
-      const primary = script === 'traditional' ? card.traditional : card.simplified;
+      const primary = card.language === 'ja' ? card.headword : script === 'traditional' ? card.traditional : card.simplified;
       const secondary = script === 'traditional' ? card.simplified : card.traditional;
 
       const word = document.createElement('span');
@@ -297,7 +298,8 @@
 
       const pinyin = document.createElement('span');
       pinyin.className = 'pinyin';
-      for (const syllable of card.syllables) {
+      if (card.language === 'ja') pinyin.textContent = card.reading;
+      for (const syllable of card.syllables ?? []) {
         const span = document.createElement('span');
         span.className = `tone tone-${syllable.tone}`;
         span.textContent = syllable.text;

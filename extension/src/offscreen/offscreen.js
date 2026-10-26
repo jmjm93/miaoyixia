@@ -14,7 +14,8 @@
 // ran, never registered its listener, and every snip failed with the singularly unhelpful
 // "Could not establish connection. Receiving end does not exist."
 import Tesseract from '../../data/ocr/tesseract.esm.min.js';
-import { OCR_MODELS, findColumnCuts, inkProfile, isVertical, recogniserScale } from '../lib/ocr.js';
+import { OCR_MODELS, JAPANESE_OCR_MODELS, findColumnCuts, inkProfile, isVertical, recogniserScale } from '../lib/ocr.js';
+import { withJapaneseModelCache } from '../lib/japanese-store.js';
 
 /** LSTM only. The legacy engine is not in the core build we vendor, and we never want it. */
 const LSTM_ONLY = 1;
@@ -39,7 +40,8 @@ const PSM_VERTICAL_BLOCK = '5';
 const engines = new Map();
 
 async function startEngine(model) {
-  const worker = await Tesseract.createWorker(model, LSTM_ONLY, {
+  const japanese = JAPANESE_OCR_MODELS.includes(model);
+  const start = () => Tesseract.createWorker(model, LSTM_ONLY, {
     // Every path is an extension URL: nothing may be fetched from the network.
     workerPath: chrome.runtime.getURL('data/ocr/worker.min.js'),
     corePath: chrome.runtime.getURL('data/ocr/tesseract-core-simd-lstm.wasm.js'),
@@ -50,8 +52,9 @@ async function startEngine(model) {
     // route is what tesseract.js does by default and what MV3 is most likely to object to.
     workerBlobURL: false,
     // The model is already on disk beside us; caching a copy of it in IndexedDB buys nothing.
-    cacheMethod: 'none',
+    cacheMethod: japanese ? 'readOnly' : 'none',
   });
+  const worker = japanese ? await withJapaneseModelCache(model, start) : await start();
 
   if (isVertical(model)) await worker.setParameters({ tessedit_pageseg_mode: PSM_VERTICAL_BLOCK });
   return worker;
@@ -153,7 +156,7 @@ function splitColumns(source) {
 }
 
 async function recognise(dataUrl, model) {
-  const chosen = OCR_MODELS.includes(model) ? model : OCR_MODELS[0];
+  const chosen = [...OCR_MODELS, ...JAPANESE_OCR_MODELS].includes(model) ? model : OCR_MODELS[0];
   const worker = await recogniser(chosen);
   // The canvas goes straight in; tesseract.js takes one, so there is no second base64 round trip.
   const image = await enlarge(dataUrl);
@@ -178,6 +181,15 @@ async function recognise(dataUrl, model) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === 'ocr:clearJapanese') {
+    const pending = JAPANESE_OCR_MODELS.map((model) => {
+      const engine = engines.get(model);
+      engines.delete(model);
+      return engine?.then((worker) => worker.terminate());
+    });
+    Promise.allSettled(pending).then(() => sendResponse({ ok: true }));
+    return true;
+  }
   // Answering this is the whole point: createDocument resolves as soon as the document exists,
   // which is before a deferred module script has run. The worker pings until this replies, so it
   // never hands work to a document that cannot yet receive it.

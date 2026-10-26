@@ -35,6 +35,18 @@
 
       // --- options page: lookups ---
       enabled: 'Enabled',
+      japaneseHeading: 'Japanese add-on (preview)',
+      japaneseEnabled: 'Enable Japanese',
+      japaneseHint: 'Downloads JMdict and two OCR models once (about 17 MB). Chinese stays the default.',
+      japanesePreview: 'Japanese preview: English definitions, basic conjugations, and horizontal/vertical OCR. Audio and sentence translation are not supported yet.',
+      japaneseDownloading: 'Downloading Japanese… $1 MB',
+      japaneseDownloaded: '$1 Japanese dictionary entries · OCR ready · works offline',
+      japaneseNeedsPermission: 'Allow access to GitHub to download Japanese',
+      lookupLanguage: 'Reading language',
+      lookupLanguageHint: 'Language for webpage lookups and text recognition in captures. Only available when using Japanese as well.',
+      readingChinese: 'Chinese',
+      readingAutomatic: 'Automatic',
+      readingJapanese: 'Japanese',
       uiLanguage: 'Language',
       uiLanguageHint: 'Language of this page, the popup and the toolbar menu',
       langAuto: 'Match browser',
@@ -140,6 +152,11 @@
 
       // --- Anki field bindings (anki-fields.js TOKENS) ---
       tokenNone: '— leave empty —',
+      tokenReading: 'Reading',
+      tokenFurigana: 'Word with furigana (HTML ruby)',
+      ankiChinese: 'Anki — Chinese',
+      ankiJapanese: 'Anki — Japanese',
+      japaneseNoteTypeHint: 'Created automatically if it does not exist yet',
       tokenHeadword: 'Word (as hovered)',
       tokenSimplified: 'Simplified',
       tokenTraditional: 'Traditional',
@@ -257,6 +274,18 @@
 
       // --- options page: lookups ---
       enabled: 'Activado',
+      japaneseHeading: 'Complemento japonés (prueba)',
+      japaneseEnabled: 'Activar japonés',
+      japaneseHint: 'Descarga JMdict y dos modelos OCR una vez (unos 17 MB). El chino sigue siendo el idioma predeterminado.',
+      japanesePreview: 'Prueba de japonés: definiciones en inglés, conjugaciones básicas y OCR horizontal/vertical. Audio y traducción de frases aún no disponibles.',
+      japaneseDownloading: 'Descargando japonés… $1 MB',
+      japaneseDownloaded: '$1 entradas de japonés · OCR listo · funciona sin conexión',
+      japaneseNeedsPermission: 'Permite el acceso a GitHub para descargar japonés',
+      lookupLanguage: 'Idioma de lectura',
+      lookupLanguageHint: 'Idioma para las consultas en páginas web y el reconocimiento de texto en capturas. Solo disponible cuando también se usa japonés.',
+      readingChinese: 'Chino',
+      readingAutomatic: 'Automático',
+      readingJapanese: 'Japonés',
       uiLanguage: 'Idioma',
       uiLanguageHint: 'Idioma de esta página, del popup y del menú de control (no de las traducciones en sí)',
       langAuto: 'Como el navegador',
@@ -369,6 +398,11 @@
 
       // --- Anki field bindings (anki-fields.js TOKENS) ---
       tokenNone: '— dejar vacío —',
+      tokenReading: 'Lectura',
+      tokenFurigana: 'Palabra con furigana (HTML ruby)',
+      ankiChinese: 'Anki — Chino',
+      ankiJapanese: 'Anki — Japonés',
+      japaneseNoteTypeHint: 'Se crea automáticamente si no existe',
       tokenHeadword: 'Palabra (tal como se señaló)',
       tokenSimplified: 'Simplificado',
       tokenTraditional: 'Tradicional',

@@ -17,6 +17,7 @@ import {
   requestGlossPermission,
 } from '../lib/gloss-store.js';
 import { LANGUAGES, language, t, tn } from '../lib/i18n.js';
+import { JAPANESE_ORIGINS, JAPANESE_VERSION, clearJapanese, downloadJapanese, japaneseInfo } from '../lib/japanese-store.js';
 
 const ANKI_ORIGINS = ['http://127.0.0.1:8765/*', 'http://localhost:8765/*'];
 const TRANSLATE_ORIGINS = ['https://translate.googleapis.com/*'];
@@ -54,6 +55,10 @@ let dictError = false;
 
 const saved = document.getElementById('saved');
 let savedTimer = null;
+let japaneseInstalled = false;
+let japaneseBusy = false;
+let japaneseProgress;
+let japaneseError = '';
 
 function flashSaved() {
   saved.hidden = false;
@@ -96,12 +101,12 @@ function applyTranslations() {
  * resets them to "Not checked", "Loading…" and so on. Anything already known has to be put back.
  */
 function renderLiveText() {
+  refreshJapanese();
   renderVoiceStatus();
   renderDictMeta();
   refreshGloss();
   // refreshAnki redraws the field rows itself; without it nothing else would.
-  if (ankiEl.enabled.checked) refreshAnki();
-  else renderFieldRows(modelFields ?? Object.keys(settings.ankiFields));
+  for (const profile of ankiProfiles) profile.redraw();
 }
 
 function renderDictMeta() {
@@ -139,6 +144,12 @@ function writeControl(input, value) {
 
 /** Rows that only mean something for certain choices elsewhere on the page. */
 function syncConditionalRows() {
+  const japanese = settings.japaneseEnabled && settings.lookupLanguage === 'ja';
+  document.getElementById('lookupLanguage').disabled = !settings.japaneseEnabled || !japaneseInstalled;
+  document.getElementById('lookupLanguage').querySelector('[value="ja"]').disabled = !settings.japaneseEnabled || !japaneseInstalled;
+  document.getElementById('lookupLanguage').querySelector('[value="auto"]').disabled = !settings.japaneseEnabled || !japaneseInstalled;
+  document.getElementById('script').closest('.row').hidden = japanese;
+  document.getElementById('ocrScript').closest('.row').hidden = japanese;
   const hoverOnly = document.getElementById('triggerKey').value === HOVER_ONLY;
   document.getElementById('hoverDelayRow').hidden = !hoverOnly;
 
@@ -264,6 +275,8 @@ for (const key of Object.keys(DEFAULT_SETTINGS)) {
   if (!input) continue;
 
   writeControl(input, settings[key]);
+  // Enabling is committed only after the complete local data pack is ready.
+  if (key === 'japaneseEnabled') continue;
   input.addEventListener('input', () => {
     const value = readControl(input);
     // Keep the in-memory copy in step: syncVoiceDependentOptions reads it to restore the
@@ -292,6 +305,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (changes.glossLanguage) refreshGloss();
+  if (changes.japaneseEnabled || changes.lookupLanguage) refreshJapanese();
 
   // getSettings() is what pins the language, so re-read before repainting the text.
   if (changes.uiLanguage) {
@@ -310,118 +324,241 @@ chrome.storage.onChanged.addListener((changes, area) => {
 syncConditionalRows();
 reportVoices();
 
+// --- optional Japanese dictionary and OCR ------------------------------------
+async function refreshJapanese() {
+  const info = await japaneseInfo();
+  japaneseInstalled = info?.version === JAPANESE_VERSION;
+  const status = document.getElementById('japaneseStatus');
+  status.textContent = japaneseBusy
+    ? (japaneseProgress === null ? t('glossPreparing') : t('japaneseDownloading', ((japaneseProgress ?? 0) / 1e6).toFixed(1)))
+    : japaneseError ? t('glossFailed', japaneseError)
+    : japaneseInstalled ? t('japaneseDownloaded', info.entries.toLocaleString(language()))
+    : t('glossNotDownloaded');
+  document.getElementById('japaneseEnabled').disabled = japaneseBusy;
+  document.getElementById('japaneseDownload').hidden = japaneseInstalled;
+  document.getElementById('japaneseDownload').disabled = japaneseBusy;
+  document.getElementById('japaneseRemove').hidden = !info;
+  document.getElementById('japaneseRemove').disabled = japaneseBusy;
+  syncConditionalRows();
+}
+
+async function enableJapanese() {
+  if (japaneseBusy) return;
+  japaneseBusy = true;
+  japaneseError = '';
+  japaneseProgress = 0;
+  try {
+    // Request directly from the click, before any download or IndexedDB await.
+    if (!japaneseInstalled && !(await chrome.permissions.request({ origins: JAPANESE_ORIGINS }))) {
+      throw new Error(t('japaneseNeedsPermission'));
+    }
+    await refreshJapanese();
+    if (!japaneseInstalled) {
+      await downloadJapanese((bytes) => {
+        japaneseProgress = bytes;
+        document.getElementById('japaneseStatus').textContent = bytes === null
+          ? t('glossPreparing') : t('japaneseDownloading', (bytes / 1e6).toFixed(1));
+      });
+    }
+    await chrome.runtime.sendMessage({ type: 'japaneseChanged' });
+    settings.japaneseEnabled = true;
+    await chrome.storage.sync.set({ japaneseEnabled: true });
+    flashSaved();
+  } catch (error) {
+    japaneseError = String(error?.message ?? error);
+  } finally {
+    japaneseBusy = false;
+    writeControl(document.getElementById('japaneseEnabled'), settings.japaneseEnabled);
+    await refreshJapanese();
+  }
+}
+
+document.getElementById('japaneseEnabled').addEventListener('change', async (event) => {
+  if (event.target.checked) return enableJapanese();
+  settings.japaneseEnabled = false;
+  settings.lookupLanguage = 'zh';
+  writeControl(document.getElementById('lookupLanguage'), 'zh');
+  await chrome.storage.sync.set({ japaneseEnabled: false, lookupLanguage: 'zh' });
+  await refreshJapanese();
+});
+document.getElementById('japaneseDownload').addEventListener('click', enableJapanese);
+document.getElementById('japaneseRemove').addEventListener('click', async () => {
+  if (japaneseBusy) return;
+  japaneseBusy = true;
+  try {
+    settings.japaneseEnabled = false;
+    settings.lookupLanguage = 'zh';
+    await chrome.storage.sync.set({ japaneseEnabled: false, lookupLanguage: 'zh' });
+    writeControl(document.getElementById('japaneseEnabled'), false);
+    writeControl(document.getElementById('lookupLanguage'), 'zh');
+    await clearJapanese();
+    await chrome.runtime.sendMessage({ type: 'japaneseChanged' });
+    await chrome.runtime.sendMessage({ type: 'ocr:clearJapanese' }).catch(() => {});
+    japaneseError = '';
+  } catch (error) { japaneseError = String(error?.message ?? error); }
+  finally { japaneseBusy = false; await refreshJapanese(); }
+});
+
 // --- Anki ---------------------------------------------------------------------
 //
 // Deck, note type and every field name are read from the collection rather than assumed. The
 // shipped defaults only pre-fill the inputs, so a different collection needs no code change.
 
-const ankiEl = {
-  enabled: document.getElementById('ankiEnabled'),
-  deck: document.getElementById('ankiDeck'),
-  model: document.getElementById('ankiModel'),
-  deckList: document.getElementById('ankiDeckList'),
-  modelList: document.getElementById('ankiModelList'),
-  status: document.getElementById('ankiStatus'),
-  permissionState: document.getElementById('ankiPermissionState'),
-  permissionRow: document.getElementById('ankiPermissionRow'),
-  statusRow: document.getElementById('ankiStatusRow'),
-  grant: document.getElementById('ankiGrant'),
-  retry: document.getElementById('ankiRetry'),
-  table: document.getElementById('ankiFieldsTable'),
-  note: document.getElementById('ankiFieldsNote'),
-};
+function createAnkiProfile(prefix) {
+  const container = document.getElementById(prefix + 'Profile');
+  const excludedTokens = prefix === 'anki'
+    ? ['reading', 'furigana']
+    : ['simplified', 'traditional', 'colourHanzi', 'pinyin', 'colourPinyin', 'pinyinNumbered', 'audio'];
+  const tokens = TOKENS.filter((token) => !excludedTokens.includes(token.id));
+  const ankiEl = {
+    enabled: document.getElementById(prefix + 'Enabled'),
+    deck: document.getElementById(prefix + 'Deck'),
+    model: document.getElementById(prefix + 'Model'),
+    deckList: document.getElementById(prefix + 'DeckList'),
+    modelList: document.getElementById(prefix + 'ModelList'),
+    status: document.getElementById(prefix + 'Status'),
+    permissionState: document.getElementById(prefix + 'PermissionState'),
+    permissionRow: document.getElementById(prefix + 'PermissionRow'),
+    statusRow: document.getElementById(prefix + 'StatusRow'),
+    grant: document.getElementById(prefix + 'Grant'),
+    retry: document.getElementById(prefix + 'Retry'),
+    table: document.getElementById(prefix + 'FieldsTable'),
+    note: document.getElementById(prefix + 'FieldsNote'),
+  };
 
-/** Field names of the note type currently typed in, or null while unknown. */
-let modelFields = null;
+  /** Field names of the note type currently typed in, or null while unknown. */
+  let modelFields = null;
 
-function fillOptions(datalist, values) {
-  datalist.replaceChildren();
-  for (const value of values) {
-    const option = document.createElement('option');
-    option.value = value;
-    datalist.append(option);
-  }
-}
-
-/**
- * One row per field of the selected note type, each bound to a token.
- * Falls back to the configured mapping's own keys when the collection can't be read, so the
- * mapping stays editable while Anki is closed.
- */
-function renderFieldRows(fields) {
-  const body = ankiEl.table.querySelector('tbody');
-  body.replaceChildren();
-
-  for (const field of fields) {
-    const row = document.createElement('tr');
-
-    const label = document.createElement('th');
-    label.textContent = field;
-    label.scope = 'row';
-
-    const cell = document.createElement('td');
-    const select = document.createElement('select');
-    for (const token of TOKENS) {
+  function fillOptions(datalist, values) {
+    datalist.replaceChildren();
+    for (const value of values) {
       const option = document.createElement('option');
-      option.value = token.id;
-      option.textContent = tokenLabel(token);
-      select.append(option);
+      option.value = value;
+      datalist.append(option);
     }
-    select.value = settings.ankiFields[field] ?? 'none';
-    select.addEventListener('change', () => {
-      settings.ankiFields = { ...settings.ankiFields, [field]: select.value };
-      chrome.storage.sync.set({ ankiFields: settings.ankiFields }).then(flashSaved);
-    });
-
-    cell.append(select);
-    row.append(label, cell);
-    body.append(row);
   }
 
-  ankiEl.note.hidden = fields.length > 0 === false;
-}
+  /**
+   * One row per field of the selected note type, each bound to a token.
+   * Falls back to the configured mapping's own keys when the collection can't be read, so the
+   * mapping stays editable while Anki is closed.
+   */
+  function renderFieldRows(fields) {
+    const body = ankiEl.table.querySelector('tbody');
+    body.replaceChildren();
 
-async function hasAnkiPermission() {
-  return chrome.permissions.contains({ origins: ANKI_ORIGINS });
-}
+    for (const field of fields) {
+      const row = document.createElement('tr');
 
-/** Ask Anki for the collection's shape, and populate the dropdowns from it. */
-async function refreshAnki() {
-  const granted = await hasAnkiPermission();
-  ankiEl.permissionState.textContent = t(granted ? 'granted' : 'notGranted');
-  ankiEl.grant.hidden = granted;
+      const label = document.createElement('th');
+      label.textContent = field;
+      label.scope = 'row';
 
-  if (!granted) {
-    ankiEl.status.textContent = t('grantFirst');
-    renderFieldRows(Object.keys(settings.ankiFields));
-    return;
-  }
+      const cell = document.createElement('td');
+      const select = document.createElement('select');
+      for (const token of tokens) {
+        const option = document.createElement('option');
+        option.value = token.id;
+        option.textContent = tokenLabel(token);
+        select.append(option);
+      }
+      select.value = settings[prefix + 'Fields'][field] ?? 'none';
+      select.addEventListener('change', () => {
+        settings[prefix + 'Fields'] = { ...settings[prefix + 'Fields'], [field]: select.value };
+        chrome.storage.sync.set({ [prefix + 'Fields']: settings[prefix + 'Fields'] }).then(flashSaved);
+      });
 
-  ankiEl.status.textContent = t('checking');
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'ankiCollection' });
-    if (!response?.ok) throw new Error(response?.error ?? 'no response');
-    const { version, decks, models } = response.result;
-
-    ankiEl.status.textContent = tn('ankiConnected', decks.length, version, decks.length);
-    fillOptions(ankiEl.deckList, decks);
-    fillOptions(ankiEl.modelList, models);
-
-    // Only the chosen note type's real fields are worth offering.
-    if (models.includes(settings.ankiModel)) {
-      const fieldResponse = await chrome.runtime.sendMessage({ type: 'ankiFields', model: settings.ankiModel });
-      modelFields = fieldResponse?.ok ? fieldResponse.result.fields : null;
-      renderFieldRows(modelFields ?? Object.keys(settings.ankiFields));
-    } else {
-      // A note type that doesn't exist yet will be created from this very mapping.
-      renderFieldRows(Object.keys(settings.ankiFields));
-      ankiEl.status.textContent += t('ankiWillCreate', settings.ankiModel);
+      cell.append(select);
+      row.append(label, cell);
+      body.append(row);
     }
-  } catch (error) {
-    ankiEl.status.textContent = t('ankiUnreachable', String(error.message ?? error));
-    renderFieldRows(Object.keys(settings.ankiFields));
+
+    ankiEl.note.hidden = fields.length > 0 === false;
   }
+
+  async function hasAnkiPermission() {
+    return chrome.permissions.contains({ origins: ANKI_ORIGINS });
+  }
+
+  /** Ask Anki for the collection's shape, and populate the dropdowns from it. */
+  async function refreshAnki() {
+    const granted = await hasAnkiPermission();
+    ankiEl.permissionState.textContent = t(granted ? 'granted' : 'notGranted');
+    ankiEl.grant.hidden = granted;
+
+    if (!granted) {
+      ankiEl.status.textContent = t('grantFirst');
+      renderFieldRows(Object.keys(settings[prefix + 'Fields']));
+      return;
+    }
+
+    ankiEl.status.textContent = t('checking');
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'ankiCollection' });
+      if (!response?.ok) throw new Error(response?.error ?? 'no response');
+      const { version, decks, models } = response.result;
+
+      ankiEl.status.textContent = tn('ankiConnected', decks.length, version, decks.length);
+      fillOptions(ankiEl.deckList, decks);
+      fillOptions(ankiEl.modelList, models);
+
+      // Only the chosen note type's real fields are worth offering.
+      if (models.includes(settings[prefix + 'Model'])) {
+        const fieldResponse = await chrome.runtime.sendMessage({ type: 'ankiFields', model: settings[prefix + 'Model'] });
+        modelFields = fieldResponse?.ok ? fieldResponse.result.fields : null;
+        renderFieldRows(modelFields ?? Object.keys(settings[prefix + 'Fields']));
+      } else {
+        modelFields = null;
+        // A note type that doesn't exist yet will be created from this very mapping.
+        renderFieldRows(Object.keys(settings[prefix + 'Fields']));
+        ankiEl.status.textContent += t('ankiWillCreate', settings[prefix + 'Model']);
+      }
+    } catch (error) {
+      ankiEl.status.textContent = t('ankiUnreachable', String(error.message ?? error));
+      renderFieldRows(Object.keys(settings[prefix + 'Fields']));
+    }
+  }
+
+  ankiEl.grant.addEventListener('click', async () => {
+    // Must be called from a user gesture, which is why this lives on a button.
+    const granted = await chrome.permissions.request({ origins: ANKI_ORIGINS });
+    if (granted) refreshAnki();
+  });
+
+  ankiEl.retry.addEventListener('click', refreshAnki);
+
+  // Re-reading the field list is only worth it once the typed name settles.
+  ankiEl.model.addEventListener('change', refreshAnki);
+
+  function syncAnkiRows() {
+    const on = ankiEl.enabled.checked;
+    for (const el of container.querySelectorAll('table.fields, p.meta, h3')) {
+      el.hidden = !on;
+    }
+    ankiEl.permissionRow.hidden = !on;
+    ankiEl.statusRow.hidden = !on;
+    for (const id of ['Deck', 'Model', 'Tags', ...(prefix === 'anki' ? ['Script'] : [])]) {
+      document.getElementById(prefix + id).closest('.row').hidden = !on;
+    }
+
+  }
+
+  ankiEl.enabled.addEventListener('change', () => {
+    syncAnkiRows();
+    if (ankiEl.enabled.checked) refreshAnki();
+  });
+
+  syncAnkiRows();
+  if (ankiEl.enabled.checked) refreshAnki();
+  return {
+    redraw() {
+      syncAnkiRows();
+      if (ankiEl.enabled.checked) refreshAnki();
+      else renderFieldRows(modelFields ?? Object.keys(settings[prefix + 'Fields']));
+    },
+  };
 }
+const ankiProfiles = [createAnkiProfile('anki'), createAnkiProfile('japaneseAnki')];
 
 // --- the downloadable gloss layer -------------------------------------------
 //
@@ -604,40 +741,10 @@ chrome.permissions.onRemoved?.addListener(({ origins = [] }) => {
   if (origins.some((origin) => origin.startsWith(GLOSS_ORIGIN))) refreshGloss();
 });
 
-ankiEl.grant.addEventListener('click', async () => {
-  // Must be called from a user gesture, which is why this lives on a button.
-  const granted = await chrome.permissions.request({ origins: ANKI_ORIGINS });
-  if (granted) refreshAnki();
-});
-
-ankiEl.retry.addEventListener('click', refreshAnki);
-
-// Re-reading the field list is only worth it once the typed name settles.
-ankiEl.model.addEventListener('change', refreshAnki);
-
-function syncAnkiRows() {
-  const on = ankiEl.enabled.checked;
-  for (const el of ankiEl.table.closest('main').querySelectorAll('#ankiFieldsTable, #ankiFieldsNote')) {
-    el.hidden = !on;
-  }
-  ankiEl.permissionRow.hidden = !on;
-  ankiEl.statusRow.hidden = !on;
-  for (const id of ['ankiDeck', 'ankiModel', 'ankiTags']) {
-    document.getElementById(id).closest('.row').hidden = !on;
-  }
-  document.querySelector('h3').hidden = !on;
-}
-
-ankiEl.enabled.addEventListener('change', () => {
-  syncAnkiRows();
-  if (ankiEl.enabled.checked) refreshAnki();
-});
-
-syncAnkiRows();
-if (ankiEl.enabled.checked) refreshAnki();
 // Awaited, unlike refreshAnki above: it reads IndexedDB, so firing it and moving on would let
 // the page announce itself ready with the language list still empty.
 await refreshGloss();
+await refreshJapanese();
 
 // Report what the bundled dictionary actually contains, so a stale or missing build is obvious.
 try {
